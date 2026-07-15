@@ -1,11 +1,23 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+
+# Ambiente virtual
 .venv/
+venv/
+
+# VS Code
 .vscode/
+
+# JetBrains
 .idea/
 
-output/
-dist/
-build/
+# R
+.Rhistory
+.RData
+.Rproj.user/
 
-*.log
+# Sistema
+.DS_Store
+Thumbs.db
