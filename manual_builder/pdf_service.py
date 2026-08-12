@@ -12,7 +12,7 @@ from manual_builder.models import PdfPage
 
 
 class PdfRenderService:
-    """Render PDF pages as PNG images using PyMuPDF."""
+    """Render PDF pages as PNG images and extract page text using PyMuPDF."""
 
     EXPORT_DPI = 200
     THUMBNAIL_SCALE = 0.25
@@ -23,7 +23,7 @@ class PdfRenderService:
         destination: Path,
         on_progress: Callable[[int, int], None],
     ) -> list[PdfPage]:
-        """Render all pages and report completed pages through a callback."""
+        """Render all pages, extract text, and report completed pages through a callback."""
         destination.mkdir(parents=True, exist_ok=True)
         pages: list[PdfPage] = []
         document = fitz.open(source)
@@ -39,11 +39,16 @@ class PdfRenderService:
                 )
                 thumbnail_path = destination / f"thumbnail_{index:03d}.png"
                 thumbnail_pixmap.save(thumbnail_path)
+                
+                # Extract text content from page for AI contextual understanding
+                page_text = page.get_text("text").strip()
+
                 pages.append(
                     PdfPage(
                         number=index,
                         image_path=image_path,
                         thumbnail_path=thumbnail_path,
+                        extracted_text=page_text,
                     )
                 )
                 on_progress(index, total)

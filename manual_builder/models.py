@@ -9,12 +9,13 @@ from typing import Union
 
 @dataclass(frozen=True, slots=True)
 class PdfPage:
-    """A PDF page with independent export and thumbnail images."""
+    """A PDF page with independent export, thumbnail images and extracted text content."""
 
     number: int
     image_path: Path
     thumbnail_path: Path
     variant: int = 1
+    extracted_text: str = ""
 
     @property
     def filename(self) -> str:

@@ -259,8 +259,16 @@ class MainWindow(QMainWindow):
         self.preview = QLabel("Open a PDF to begin")
         self.preview.setObjectName("preview")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setMinimumSize(420, 300)
-        right_layout.addWidget(self.preview)
+        self.preview.setMinimumSize(500, 600)
+        
+        preview_scroll = QScrollArea()
+        preview_scroll.setWidgetResizable(True)
+        preview_scroll.setWidget(self.preview)
+        
+        preview_group = QGroupBox("📄 Pré-visualização da Página (Amplo)")
+        preview_layout = QVBoxLayout(preview_group)
+        preview_layout.addWidget(preview_scroll)
+        right_layout.addWidget(preview_group)
 
         splitter = QSplitter()
         splitter.addWidget(page_panel)
@@ -336,10 +344,10 @@ class MainWindow(QMainWindow):
         if not isinstance(page, PdfPage):
             return
         pixmap = QPixmap(str(page.image_path))
-        self.preview.setPixmap(pixmap.scaled(
-            self.preview.size(), Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        ))
+        # Exibir com resolução ampla e nítida no scroll area
+        scaled_pixmap = pixmap.scaledToWidth(700, Qt.TransformationMode.SmoothTransformation)
+        self.preview.setPixmap(scaled_pixmap)
+        self.preview.resize(scaled_pixmap.size())
 
     def export_project(self) -> None:
         """Validate input and start multilingual background export."""
@@ -611,14 +619,23 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Texto técnico gerado com sucesso!")
 
     def send_chat_message(self) -> None:
-        """Send user message to AI chat assistant."""
+        """Send user message to AI chat assistant with real PDF text context."""
         msg = self.chat_input.text().strip()
         if not msg:
             return
         self.chat_display.append(f"<br><b>Você:</b> {msg}")
         self.chat_input.clear()
-        summary = ", ".join(f"Pág {p.number}" for p in self._pages) if self._pages else "Nenhum PDF aberto"
-        reply = self._ai_service.ask_ai(msg, summary)
+        
+        if self._pages:
+            snippets = []
+            for p in self._pages:
+                snippet = p.extracted_text[:250].replace("\n", " ")
+                snippets.append(f"Página {p.number}: {snippet}")
+            pdf_context = "\n".join(snippets)
+        else:
+            pdf_context = "Nenhum PDF aberto no momento."
+            
+        reply = self._ai_service.ask_ai(msg, pdf_context)
         self.chat_display.append(f"<br><b>🤖 Manus AI:</b> {reply}")
 
     def _on_api_key_changed(self, text: str) -> None:

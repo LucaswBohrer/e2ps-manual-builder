@@ -6,7 +6,7 @@ from manual_builder.ai_service import ManualAIService
 
 def test_mixed_content_and_ai():
     print("Testing mixed content models and AI chat...")
-    page = PdfPage(number=1, image_path=Path("dummy.png"), thumbnail_path=Path("thumb.png"), variant=1)
+    page = PdfPage(number=1, image_path=Path("dummy.png"), thumbnail_path=Path("thumb.png"), variant=1, extracted_text="Teste de motor 28-40A")
     
     # Section with mixed content: text before, page image, text after
     section = ManualSection(
@@ -17,8 +17,9 @@ def test_mixed_content_and_ai():
     assert isinstance(section.content[0], str)
     assert isinstance(section.content[1], PdfPage)
 
-    ai = ManualAIService()
-    reply = ai.ask_ai("Olá, qual página devo usar para a introdução?", "Pág 1, Pág 2")
+    ai = ManualAIService("test_key", "", "llama-3.3-70b-versatile")
+    success, msg = ai.test_connection()
+    reply = ai.ask_ai("Olá, qual página devo usar para a introdução?", "Pág 1: Teste de motor")
     assert isinstance(reply, str)
     print("Mixed content and AI chat test passed successfully.")
 
