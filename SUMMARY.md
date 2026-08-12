@@ -1,11 +1,11 @@
-# Relatório Final - Otimização de Tokens da IA (E2PS Manual Builder)
+# Relatório Final - Correção dos Botões de Seção (E2PS Manual Builder)
 
-O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para resolver o erro `413 Rate Limit Exceeded` (Tokens Per Minute - TPM) ao solicitar sugestão de estrutura:
+O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para corrigir o bloqueio nos botões de gerenciamento de seções:
 
-1. **Otimização de Contexto e Truncamento Inteligente**:
-   - O serviço de IA (`ManualAIService`) foi refatorado para limitar o envio de trechos de texto por página (amostragem inteligente de até 30 páginas e truncamento de trechos para no máximo 128 caracteres).
-   - O histórico de chat foi limitado a uma janela deslizante (últimas 6 mensagens), evitando o crescimento excessivo de tokens acumulados.
-   - O parâmetro `max_tokens` foi delimitado explicitamente (`600` para sugestões e `400` para geração de texto técnico).
+1. **Correção de Habilitação do Botão de Seção**:
+   - Diagnosticou-se que o botão `Create Section (Checked Pages)` (`add_section_button`) iniciava desabilitado e nunca era reativado após a renderização das páginas do PDF.
+   - Adicionou-se a ativação automática (`self.add_section_button.setEnabled(True)`) no método de conclusão de renderização do PDF (`_rendering_completed`).
+   - Com isso, todas as demais operações (subseções, renomeação, remoção e inserção de blocos de texto) voltam a funcionar perfeitamente ao selecionar ou criar itens.
 
 2. **Sincronização com o GitHub**:
-   - A otimização foi testada e enviada (*commit and push*) com sucesso para o repositório oficial no GitHub.
+   - A correção foi testada por compilação estática e enviada (*commit and push*) com sucesso para o repositório oficial no GitHub.

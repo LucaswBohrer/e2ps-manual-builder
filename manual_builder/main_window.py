@@ -6,6 +6,7 @@ from datetime import date
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from PIL import Image
 
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QAction, QIcon, QPixmap
@@ -63,6 +64,10 @@ class MainWindow(QMainWindow):
         open_action = QAction("Open PDF", self)
         open_action.triggered.connect(self.open_pdf)
         toolbar.addAction(open_action)
+        
+        open_images_action = QAction("Open Images", self)
+        open_images_action.triggered.connect(self.open_images)
+        toolbar.addAction(open_images_action)
         toolbar.addSeparator()
         toolbar.addWidget(QLabel("Manual title:"))
         self.title_input = QLineEdit("E2PS Technical Manual")
@@ -303,6 +308,7 @@ class MainWindow(QMainWindow):
         self.clear_selection_button.setEnabled(False)
         self.crop_page_button.setEnabled(False)
         self.ai_suggest_button.setEnabled(False)
+        self.add_section_button.setEnabled(False)
 
         self._render_worker = PdfRenderWorker(Path(file_path), Path(self._temp_dir.name))
         self._render_worker.progress_changed.connect(self._update_render_progress)
@@ -314,6 +320,61 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(True)
         self._render_worker.start()
         self.statusBar().showMessage("Rendering PDF pages...")
+
+    def open_images(self) -> None:
+        """Open multiple image files directly as manual pages without PDF conversion."""
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Selecionar Imagens do Manual",
+            "",
+            "Imagens (*.png *.jpg *.jpeg *.bmp *.webp)"
+        )
+        if not file_paths:
+            return
+        
+        self._pages.clear()
+        self._sections.clear()
+        self.page_list.clear()
+        self.section_tree.clear()
+        self.export_button.setEnabled(False)
+        self.select_all_button.setEnabled(False)
+        self.clear_selection_button.setEnabled(False)
+        self.crop_page_button.setEnabled(False)
+        self.ai_suggest_button.setEnabled(False)
+        self.add_section_button.setEnabled(False)
+        
+        pages = []
+        temp_dir = Path(self._temp_dir.name)
+        for i, path_str in enumerate(file_paths, start=1):
+            src_path = Path(path_str)
+            variant = 1
+            dest_image_path = temp_dir / f"page_{i:03d}_{variant:02d}.png"
+            dest_thumb_path = temp_dir / f"thumbnail_{i:03d}_{variant:02d}.png"
+            
+            try:
+                img = Image.open(src_path)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.save(dest_image_path, "PNG")
+                
+                thumb = img.copy()
+                thumb.thumbnail((150, 150))
+                thumb.save(dest_thumb_path, "PNG")
+                
+                pdf_page = PdfPage(
+                    number=i,
+                    image_path=dest_image_path,
+                    thumbnail_path=dest_thumb_path,
+                    variant=variant,
+                    extracted_text=f"Imagem direta {src_path.stem}"
+                )
+                pages.append(pdf_page)
+            except Exception as e:
+                QMessageBox.warning(self, "Erro ao carregar imagem", f"Não foi possível processar {src_path.name}:\n{e}")
+                
+        if pages:
+            self._rendering_completed(pages)
+            self.statusBar().showMessage(f"Carregadas {len(pages)} imagens diretamente com sucesso.")
 
     def _update_render_progress(self, current: int, total: int) -> None:
         if total > 0:
