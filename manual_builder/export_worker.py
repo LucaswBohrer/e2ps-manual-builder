@@ -29,6 +29,7 @@ class MultilingualExportWorker(QThread):
         translation_provider: str,
         api_key: str,
         translation_endpoint: str,
+        cover_image_path: Path | None = None,
     ) -> None:
         super().__init__()
         self._destination = destination
@@ -41,6 +42,7 @@ class MultilingualExportWorker(QThread):
         self._translation_provider = translation_provider
         self._api_key = api_key
         self._translation_endpoint = translation_endpoint
+        self._cover_image_path = cover_image_path
 
     def run(self) -> None:
         """Run the export service and forward progress to the UI thread."""
@@ -57,6 +59,7 @@ class MultilingualExportWorker(QThread):
                 self._manual_code,
                 self._publication_date,
                 self.progress_changed.emit,
+                cover_image_path=self._cover_image_path,
             )
             self.completed.emit(str(project))
         except Exception as error:

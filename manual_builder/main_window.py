@@ -171,6 +171,19 @@ class MainWindow(QMainWindow):
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_key_input.setPlaceholderText("sk-...")
         language_layout.addWidget(self.api_key_input)
+        
+        # Cover Image selection
+        language_layout.addWidget(QLabel("Manual Cover Image (Capa.png):"))
+        cover_layout = QHBoxLayout()
+        self.cover_path_input = QLineEdit()
+        self.cover_path_input.setPlaceholderText("Select cover image (optional)...")
+        self.cover_path_input.setReadOnly(True)
+        cover_button = QPushButton("Browse...")
+        cover_button.clicked.connect(self._browse_cover_image)
+        cover_layout.addWidget(self.cover_path_input)
+        cover_layout.addWidget(cover_button)
+        language_layout.addLayout(cover_layout)
+
         section_layout.addWidget(language_group)
         self.preview = QLabel("Open a PDF to begin")
         self.preview.setObjectName("preview")
@@ -307,6 +320,7 @@ class MainWindow(QMainWindow):
         destination = QFileDialog.getExistingDirectory(self, "Choose project location")
         if not destination:
             return
+        cover_path = getattr(self, "_cover_image_path", None)
         self._export_worker = MultilingualExportWorker(
             Path(destination),
             self.title_input.text().strip(),
@@ -318,6 +332,7 @@ class MainWindow(QMainWindow):
             provider,
             api_key,
             endpoint,
+            cover_image_path=cover_path,
         )
         self._export_worker.progress_changed.connect(self._update_export_progress)
         self._export_worker.completed.connect(self._export_finished)
@@ -527,3 +542,16 @@ class MainWindow(QMainWindow):
         self.export_button.setEnabled(bool(self._sections))
         QMessageBox.critical(self, "Export failed", error)
         self.statusBar().showMessage("Multilingual export failed")
+
+    def _browse_cover_image(self) -> None:
+        """Open a file dialog to select the manual cover image."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Manual Cover Image",
+            "",
+            "Image Files (*.png *.jpg *.jpeg *.bmp)",
+        )
+        if file_path:
+            self._cover_image_path = Path(file_path)
+            self.cover_path_input.setText(self._cover_image_path.name)
+            self.statusBar().showMessage(f"Cover image selected: {self._cover_image_path.name}")
