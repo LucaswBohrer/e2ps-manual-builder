@@ -251,7 +251,7 @@ class MainWindow(QMainWindow):
     def _show_current_page(self, item: QListWidgetItem | None) -> None:
         if item is None:
             return
-        page = item.data(Qt.ItemDataRole.UserRole)
+        page = item.data(0, Qt.ItemDataRole.UserRole)
         if not isinstance(page, PdfPage):
             return
         pixmap = QPixmap(str(page.image_path))
@@ -356,7 +356,7 @@ class MainWindow(QMainWindow):
         item = self.section_tree.currentItem()
         if item is None:
             return
-        item_type, section_index, subsection_index = item.data(Qt.ItemDataRole.UserRole)
+        item_type, section_index, subsection_index = item.data(0, Qt.ItemDataRole.UserRole)
         if item_type == "section":
             self._sections.pop(section_index)
         else:
@@ -391,7 +391,7 @@ class MainWindow(QMainWindow):
         if item is None:
             QMessageBox.warning(self, "Select a page", "Choose a page to crop first.")
             return
-        page = item.data(Qt.ItemDataRole.UserRole)
+        page = item.data(0, Qt.ItemDataRole.UserRole)
         if not isinstance(page, PdfPage):
             return
         source = QPixmap(str(page.image_path))
@@ -468,7 +468,7 @@ class MainWindow(QMainWindow):
         if not title or item is None:
             QMessageBox.warning(self, "Name required", "Enter a new name before renaming.")
             return
-        item_type, section_index, subsection_index = item.data(Qt.ItemDataRole.UserRole)
+        item_type, section_index, subsection_index = item.data(0, Qt.ItemDataRole.UserRole)
         if item_type == "section":
             self._sections[section_index].title = title
         else:
@@ -488,7 +488,7 @@ class MainWindow(QMainWindow):
                 "Select a section, enter a subsection name, and check its pages.",
             )
             return
-        _, section_index, _ = item.data(Qt.ItemDataRole.UserRole)
+        _, section_index, _ = item.data(0, Qt.ItemDataRole.UserRole)
         self._sections[section_index].subsections.append(
             ManualSubsection(title=title, pages=pages)
         )

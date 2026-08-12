@@ -1,4 +1,4 @@
-"""Creation of E2PS R Markdown projects in one or more languages."""
+"""Project export service handling R Markdown generation and asset management."""
 
 from __future__ import annotations
 
@@ -64,6 +64,11 @@ library(rsvg)
 library(magick)
 ```
 
+\newpage
+
+<!--#################################################################################################################-->
+<!--Capa PDF -->
+
 \begin{{centering}}
 \vspace{{4cm}}
 
@@ -78,11 +83,12 @@ knitr::include_graphics("LogoHeader.png")
 \doublespacing
 
 {{\bf {title}}}
-
-% Equipment cover image placeholder. To add it manually, use:
-% \includegraphics[width=0.20\textwidth]{{Capa.png}}
 \vspace{{3cm}}
+```{{r uni_logo2, echo=FALSE, out.width="20%"}}
+knitr::include_graphics("Capa.png")
+```
 
+\vspace{{2cm}}
 \normalsize
 \singlespacing
 \end{{centering}}
@@ -96,6 +102,7 @@ knitr::include_graphics("LogoHeader.png")
 Code:{manual_code}
 \end{{flushright}}
 \end{{multicols}}
+
 \normalsize
 \centering
 \raggedright
@@ -128,6 +135,7 @@ class ProjectExportService:
         sections: list[ManualSection],
         manual_code: str = "",
         publication_date: str | None = None,
+        cover_image_path: Path | None = None,
     ) -> Path:
         """Create the original single-language Portuguese project format."""
         project_dir = destination / self._safe_name(title)
@@ -138,6 +146,7 @@ class ProjectExportService:
             manual_code,
             publication_date or date.today().strftime("%Y-%m"),
             "pt",
+            cover_image_path=cover_image_path,
         )
         return project_dir
 
@@ -154,6 +163,7 @@ class ProjectExportService:
         manual_code: str,
         publication_date: str,
         on_progress: Callable[[int, int], None],
+        cover_image_path: Path | None = None,
     ) -> Path:
         """Create independent language folders and translate non-source pages with AI."""
         project_dir = destination / self._safe_name(title)
@@ -220,6 +230,7 @@ class ProjectExportService:
                 if translator is not None
                 else False,
                 page_exported,
+                cover_image_path=cover_image_path,
             )
             completed_pages += pages_in_language
         return project_dir
@@ -235,13 +246,14 @@ class ProjectExportService:
         translator: TranslationService | None = None,
         translate_images: bool = False,
         on_page_exported: Callable[[], None] | None = None,
+        cover_image_path: Path | None = None,
     ) -> None:
         """Write one standalone manual, translating its selected PNG pages when asked."""
         image_dir = project_dir / "img"
         output_dir = project_dir / "output"
         image_dir.mkdir(parents=True, exist_ok=True)
         output_dir.mkdir(exist_ok=True)
-        self._copy_standard_assets(project_dir)
+        self._copy_standard_assets(project_dir, cover_image_path)
 
         section_blocks: list[str] = []
         for section_index, section in enumerate(sections, start=1):
@@ -311,11 +323,16 @@ class ProjectExportService:
             )
         return "\n\n".join(image_blocks)
 
-    def _copy_standard_assets(self, project_dir: Path) -> None:
-        """Copy logo and typography shipped with the E2PS standard package."""
+    def _copy_standard_assets(self, project_dir: Path, cover_image_path: Path | None = None) -> None:
+        """Copy logo, typography and cover image shipped with the E2PS standard package."""
         for asset in self._asset_directory.iterdir():
             if asset.is_file():
+                if asset.name.lower() == "capa.png" and cover_image_path is not None and cover_image_path.is_file():
+                    continue  # Will copy custom cover below
                 shutil.copy2(asset, project_dir / asset.name)
+        
+        if cover_image_path is not None and cover_image_path.is_file():
+            shutil.copy2(cover_image_path, project_dir / "Capa.png")
 
     @staticmethod
     def _safe_name(value: str) -> str:
