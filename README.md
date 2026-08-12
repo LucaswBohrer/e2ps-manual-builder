@@ -14,6 +14,8 @@ O **E2PS Manual Builder** agiliza a produção de manuais técnicos, eliminando 
 * **🌐 Tradução Multilíngue Completa**: Exportação simultânea para múltiplos idiomas (**Português, Inglês e Espanhol**) com tradução integrada via Manus AI.
 * **✂️ Recorte de Páginas (Crop)**: Ferramenta visual para recortar trechos de páginas do PDF, gerando variantes independentes.
 * **🎨 Identidade Visual E2PS**: Inclusão automática de logotipos, fontes e layout oficial em R Markdown.
+* **💾 Projeto E2PS (`.emb`)**: Salve e reabra o trabalho em andamento com as páginas, recortes, capa, seções, subseções, ordem dos blocos de texto e modo de exportação de cada página.
+* **🔐 Configuração de IA Persistente**: A API Key, a Base URL e o modelo selecionado podem ser salvos localmente no computador para reutilização ao reiniciar o aplicativo. A chave nunca é armazenada dentro do arquivo `.emb`.
 
 ---
 
@@ -28,6 +30,16 @@ python main.py
 
 ---
 
+# 💾 Salvar e Retomar um Manual
+
+Após adicionar páginas, recortes e estruturar o manual, use **Save Project (.emb)** na barra superior. O arquivo `.emb` é portátil e contém todos os recursos necessários para continuar o trabalho em outro momento, inclusive os arquivos de página e a capa selecionada.
+
+Para retomar, use **Open Project (.emb)** e selecione o arquivo salvo. O aplicativo reabrirá as páginas, os recortes, a estrutura do manual e os blocos de texto na mesma organização em que foram salvos.
+
+> A credencial de IA não faz parte do arquivo `.emb`, evitando que ela seja compartilhada acidentalmente ao enviar o projeto. Use **Salvar Configs** no painel de IA para mantê-la apenas neste computador.
+
+---
+
 # 🏗️ Arquitetura dos Módulos
 
 | Módulo               | Responsabilidade                      |
@@ -36,6 +48,7 @@ python main.py
 | `ai_service.py`      | Sugestão de estrutura e geração de texto |
 | `translation_service.py` | Tradução de textos e imagens via Manus AI |
 | `project_service.py` | Geração de projetos R Markdown        |
+| `project_file_service.py` | Leitura e gravação de projetos portáteis `.emb` |
 | `export_worker.py`   | Exportação multilíngue em segundo plano |
 | `models.py`          | Modelos de dados (Seções, Subseções, Páginas) |
 

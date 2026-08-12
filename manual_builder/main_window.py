@@ -11,7 +11,7 @@ try:
 except ImportError:
     Image = None
 
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QSettings
 from PySide6.QtGui import QAction, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -42,6 +42,7 @@ from manual_builder.ai_service import ManualAIService
 from manual_builder.crop_dialog import CropDialog
 from manual_builder.export_worker import MultilingualExportWorker
 from manual_builder.project_service import ProjectExportService
+from manual_builder.project_file_service import ProjectFileService
 from manual_builder.workers import PdfRenderWorker
 
 
@@ -60,6 +61,9 @@ class MainWindow(QMainWindow):
         self._export_worker: MultilingualExportWorker | None = None
         self._ai_service = ManualAIService()
         self._cover_image_path: Path | None = None
+        self._project_path: Path | None = None
+        self._project_files = ProjectFileService()
+        self._settings = QSettings("E2PS", "ManualBuilder")
 
         toolbar = QToolBar("Actions")
         toolbar.setMovable(False)
@@ -71,6 +75,15 @@ class MainWindow(QMainWindow):
         open_images_action = QAction("Open Images", self)
         open_images_action.triggered.connect(self.open_images)
         toolbar.addAction(open_images_action)
+
+        open_project_action = QAction("Open Project (.emb)", self)
+        open_project_action.triggered.connect(self.open_emb_project)
+        toolbar.addAction(open_project_action)
+
+        self.save_project_action = QAction("Save Project (.emb)", self)
+        self.save_project_action.setEnabled(False)
+        self.save_project_action.triggered.connect(self.save_emb_project)
+        toolbar.addAction(self.save_project_action)
         toolbar.addSeparator()
         toolbar.addWidget(QLabel("Manual title:"))
         self.title_input = QLineEdit("E2PS Technical Manual")
@@ -303,6 +316,147 @@ class MainWindow(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setVisible(False)
         self.statusBar().addPermanentWidget(self.progress)
+        self._restore_ai_settings()
+
+    def _restore_ai_settings(self) -> None:
+        """Restore local AI settings for this computer; project archives never contain secrets."""
+        key = str(self._settings.value("ai/api_key", "") or "")
+        base_url = str(self._settings.value("ai/base_url", "") or "")
+        model = str(self._settings.value("ai/model", "") or "")
+        self.api_key_input.setText(key)
+        self.base_url_input.setText(base_url)
+        if model:
+            self.model_input.setText(model)
+        if key or base_url or model:
+            self._ai_service.update_key(key, base_url, self.model_input.text().strip())
+
+    def _persist_ai_settings(self) -> None:
+        """Persist AI credentials only in this user's local application settings."""
+        self._settings.setValue("ai/api_key", self.api_key_input.text().strip())
+        self._settings.setValue("ai/base_url", self.base_url_input.text().strip())
+        self._settings.setValue("ai/model", self.model_input.text().strip())
+        self._settings.sync()
+
+    def _project_metadata(self) -> dict[str, object]:
+        """Return editable UI data that belongs in a portable project archive."""
+        return {
+            "title": self.title_input.text().strip(),
+            "code": self.code_input.text().strip(),
+            "year": self.year_input.currentText(),
+            "semester": self.semester_input.currentData(),
+            "source_language": self.source_language.currentData(),
+            "languages": {
+                "pt": self.pt_language.isChecked(),
+                "en": self.en_language.isChecked(),
+                "es": self.es_language.isChecked(),
+            },
+        }
+
+    def _apply_project_metadata(self, metadata: dict[str, object]) -> None:
+        """Restore editable UI controls from an .emb manifest."""
+        self.title_input.setText(str(metadata.get("title", "E2PS Technical Manual")))
+        self.code_input.setText(str(metadata.get("code", "")))
+        year = str(metadata.get("year", ""))
+        if self.year_input.findText(year) >= 0:
+            self.year_input.setCurrentText(year)
+        semester = metadata.get("semester")
+        semester_index = self.semester_input.findData(semester)
+        if semester_index >= 0:
+            self.semester_input.setCurrentIndex(semester_index)
+        source_index = self.source_language.findData(metadata.get("source_language", "pt"))
+        if source_index >= 0:
+            self.source_language.setCurrentIndex(source_index)
+        languages = metadata.get("languages", {})
+        if isinstance(languages, dict):
+            self.pt_language.setChecked(bool(languages.get("pt", True)))
+            self.en_language.setChecked(bool(languages.get("en", False)))
+            self.es_language.setChecked(bool(languages.get("es", False)))
+
+    def _populate_page_list(self) -> None:
+        """Render the current project pages in the source-page list."""
+        self.page_list.clear()
+        for page in self._pages:
+            item = QListWidgetItem(page.display_name)
+            item.setData(Qt.ItemDataRole.UserRole, page)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            item.setIcon(QIcon(str(page.thumbnail_path)))
+            item.setSizeHint(QSize(0, 42))
+            self.page_list.addItem(item)
+
+    def save_emb_project(self) -> None:
+        """Save all manual assets and editable structure to a portable .emb project file."""
+        if not self._pages:
+            QMessageBox.warning(self, "Projeto vazio", "Abra páginas ou imagens antes de salvar o projeto.")
+            return
+        suggested_name = self._project_path or Path(self.title_input.text().strip() or "manual_e2ps").with_suffix(".emb")
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salvar Projeto E2PS Manual Builder",
+            str(suggested_name),
+            "E2PS Manual Builder Project (*.emb)",
+        )
+        if not filename:
+            return
+        try:
+            saved_path = self._project_files.save_project(
+                Path(filename),
+                self._pages,
+                self._sections,
+                self._project_metadata(),
+                self._cover_image_path,
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "Erro ao salvar projeto", str(error))
+            return
+        self._project_path = saved_path
+        self.statusBar().showMessage(f"Projeto salvo em {saved_path.name}", 6000)
+        QMessageBox.information(
+            self,
+            "Projeto salvo",
+            "O arquivo .emb foi salvo com as páginas, recortes, capa, seções, subseções e blocos de texto.\n\n"
+            "Por segurança, a chave da IA não é incluída no arquivo .emb; ela permanece apenas neste computador.",
+        )
+
+    def open_emb_project(self) -> None:
+        """Open a portable .emb project and restore it to this app session."""
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Abrir Projeto E2PS Manual Builder",
+            "",
+            "E2PS Manual Builder Project (*.emb)",
+        )
+        if not filename:
+            return
+        restore_root = Path(self._temp_dir.name) / "restored_emb_project"
+        if restore_root.exists():
+            import shutil
+            shutil.rmtree(restore_root)
+        try:
+            loaded = self._project_files.load_project(Path(filename), restore_root)
+        except Exception as error:
+            QMessageBox.critical(self, "Erro ao abrir projeto", str(error))
+            return
+        self._pages = loaded.pages
+        self._sections = loaded.sections
+        self._cover_image_path = loaded.cover_image_path
+        self.cover_path_input.setText(str(loaded.cover_image_path) if loaded.cover_image_path else "")
+        self._project_path = Path(filename)
+        self._apply_project_metadata(loaded.metadata)
+        self._populate_page_list()
+        self._refresh_sections()
+        has_pages = bool(self._pages)
+        self.select_all_button.setEnabled(has_pages)
+        self.clear_selection_button.setEnabled(has_pages)
+        self.crop_page_button.setEnabled(has_pages)
+        self.ai_suggest_button.setEnabled(has_pages)
+        self.add_section_button.setEnabled(has_pages)
+        self.export_button.setEnabled(bool(self._sections))
+        self.save_project_action.setEnabled(has_pages)
+        self.progress.setVisible(False)
+        self.statusBar().showMessage(
+            f"Projeto aberto: {Path(filename).name} ({len(self._pages)} páginas, {len(self._sections)} seções)",
+            7000,
+        )
 
     def open_pdf(self) -> None:
         """Open a PDF file and start background rendering."""
@@ -313,9 +467,11 @@ class MainWindow(QMainWindow):
             return
         self._pages.clear()
         self._sections.clear()
+        self._project_path = None
         self.page_list.clear()
         self.section_tree.clear()
         self.export_button.setEnabled(False)
+        self.save_project_action.setEnabled(False)
         self.select_all_button.setEnabled(False)
         self.clear_selection_button.setEnabled(False)
         self.crop_page_button.setEnabled(False)
@@ -346,9 +502,11 @@ class MainWindow(QMainWindow):
         
         self._pages.clear()
         self._sections.clear()
+        self._project_path = None
         self.page_list.clear()
         self.section_tree.clear()
         self.export_button.setEnabled(False)
+        self.save_project_action.setEnabled(False)
         self.select_all_button.setEnabled(False)
         self.clear_selection_button.setEnabled(False)
         self.crop_page_button.setEnabled(False)
@@ -396,14 +554,7 @@ class MainWindow(QMainWindow):
 
     def _rendering_completed(self, pages: list[PdfPage]) -> None:
         self._pages = pages
-        self.page_list.clear()
-        for page in pages:
-            item = QListWidgetItem(page.display_name)
-            item.setData(Qt.ItemDataRole.UserRole, page)
-            item.setCheckState(Qt.CheckState.Unchecked)
-            item.setIcon(QIcon(str(page.thumbnail_path)))
-            item.setSizeHint(QSize(0, 42))
-            self.page_list.addItem(item)
+        self._populate_page_list()
 
         self.progress.setVisible(False)
         self.select_all_button.setEnabled(True)
@@ -411,6 +562,7 @@ class MainWindow(QMainWindow):
         self.crop_page_button.setEnabled(True)
         self.ai_suggest_button.setEnabled(bool(self._pages))
         self.add_section_button.setEnabled(bool(self._pages))
+        self.save_project_action.setEnabled(bool(self._pages))
         self.statusBar().showMessage(f"Successfully rendered {len(pages)} pages")
 
     def _rendering_failed(self, error: str) -> None:
@@ -777,8 +929,14 @@ class MainWindow(QMainWindow):
         base_url = self.base_url_input.text().strip()
         model = self.model_input.text().strip()
         self._ai_service.update_key(key, base_url, model)
-        QMessageBox.information(self, "Configurações Salvas", f"Configurações salvas!\nModelo: {model or 'gpt-4o-mini'}\nBase URL: {base_url or 'OpenAI Default'}")
+        self._persist_ai_settings()
+        QMessageBox.information(self, "Configurações Salvas", f"Configurações salvas neste computador!\nModelo: {model or 'llama-3.3-70b-versatile'}\nBase URL: {base_url or 'OpenAI Default'}")
         self.statusBar().showMessage("Configurações de IA atualizadas.")
+
+    def closeEvent(self, event) -> None:
+        """Keep the current AI configuration available on this computer after restart."""
+        self._persist_ai_settings()
+        super().closeEvent(event)
 
     def _browse_cover_image(self) -> None:
         """Open file dialog to select manual cover image."""
