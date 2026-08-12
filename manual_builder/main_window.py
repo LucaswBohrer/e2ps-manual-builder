@@ -115,12 +115,21 @@ class MainWindow(QMainWindow):
         self.crop_page_button = QPushButton("Crop Selected Page")
         self.crop_page_button.setEnabled(False)
         self.crop_page_button.clicked.connect(self.crop_current_page)
+
+        self.export_mode_combo = QComboBox()
+        self.export_mode_combo.addItem("Modo: Imagem Traduzida", "image")
+        self.export_mode_combo.addItem("Modo: Texto/Tabela (OCR)", "text")
+        self.export_mode_combo.setToolTip("Escolha como esta página será exportada no manual final.")
+        self.export_mode_combo.setEnabled(False)
+        self.export_mode_combo.currentIndexChanged.connect(self._change_page_export_mode)
         
         page_panel = QGroupBox("PDF Pages & Crops")
         page_layout = QVBoxLayout(page_panel)
         page_layout.addWidget(self.select_all_button)
         page_layout.addWidget(self.clear_selection_button)
         page_layout.addWidget(self.crop_page_button)
+        page_layout.addWidget(QLabel("Exportar página selecionada como:"))
+        page_layout.addWidget(self.export_mode_combo)
         page_layout.addWidget(self.page_list)
 
         # Middle panel: Sections, Subsections & Mixed Content Blocks
@@ -412,15 +421,47 @@ class MainWindow(QMainWindow):
 
     def _show_current_page(self, item: QListWidgetItem | None) -> None:
         if item is None:
+            self.export_mode_combo.setEnabled(False)
             return
         page = item.data(Qt.ItemDataRole.UserRole)
         if not isinstance(page, PdfPage):
+            self.export_mode_combo.setEnabled(False)
             return
+        
+        # Atualizar combo de modo de exportação para a página selecionada
+        self.export_mode_combo.setEnabled(True)
+        mode_idx = self.export_mode_combo.findData(getattr(page, "export_mode", "image"))
+        self.export_mode_combo.setCurrentIndex(mode_idx)
+
         pixmap = QPixmap(str(page.image_path))
         # Exibir com resolução otimizada (500px de largura) para caber 100% dentro da aba de visualização
         scaled_pixmap = pixmap.scaledToWidth(500, Qt.TransformationMode.SmoothTransformation)
         self.preview.setPixmap(scaled_pixmap)
         self.preview.resize(scaled_pixmap.size())
+
+    def _change_page_export_mode(self, index: int) -> None:
+        """Update the export mode (image/text) for the currently selected page."""
+        item = self.page_list.currentItem()
+        if item is None:
+            return
+        page = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(page, PdfPage):
+            return
+        
+        new_mode = self.export_mode_combo.itemData(index)
+        # Como PdfPage é frozen, precisamos criar uma nova instância com o modo atualizado
+        from dataclasses import replace
+        new_page = replace(page, export_mode=new_mode)
+        
+        # Atualizar na lista interna _pages
+        for i, p in enumerate(self._pages):
+            if p.number == page.number and p.variant == page.variant:
+                self._pages[i] = new_page
+                break
+        
+        # Atualizar o item da lista
+        item.setData(Qt.ItemDataRole.UserRole, new_page)
+        self.statusBar().showMessage(f"Página {page.number} configurada para exportação como {new_mode}.")
 
     def export_project(self) -> None:
         """Validate input and start multilingual background export."""

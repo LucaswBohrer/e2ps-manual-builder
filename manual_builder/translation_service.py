@@ -39,6 +39,9 @@ class TranslationService(Protocol):
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
         """Translate page image."""
 
+    def extract_structured_content(self, source: Path, target_language: str) -> str:
+        """Extract and translate image content as structured Markdown (text/tables)."""
+
 
 class ManusTranslationService:
     """Translation service powered by Manus AI sandbox proxy (OpenAI-compatible endpoints)."""
@@ -103,8 +106,10 @@ class ManusTranslationService:
                     f"Provide a concise summary of the translated technical terms as a short headline (maximum 8 words)."
                 )
                 try:
+                    # Usar o modelo configurado (Groq) se suportar visão, caso contrário gpt-4o-mini
+                    vision_model = self._model if "llama" not in self._model.lower() else "gpt-4o-mini"
                     response = self._client.chat.completions.create(
-                        model="gpt-4o-mini",
+                        model=vision_model,
                         messages=[
                             {
                                 "role": "user",
@@ -149,6 +154,48 @@ class ManusTranslationService:
                 img.save(target, "PNG")
         except Exception:
             target.write_bytes(source.read_bytes())
+
+    def extract_structured_content(self, source: Path, target_language: str) -> str:
+        """Extract and translate image content as structured Markdown (text/tables) using AI Vision."""
+        if self._client is None:
+            return "Erro: Serviço de tradução não configurado."
+
+        try:
+            import base64
+            with open(source, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+            
+            prompt = (
+                f"You are a technical documentation expert. Extract ALL textual content from this technical manual page. "
+                f"Translate everything into {LANGUAGE_NAMES.get(target_language, target_language)}. "
+                f"RECONSTRUCT all tables as clean Markdown tables. "
+                f"Preserve technical specs, units (like V, A, kW), and codes exactly. "
+                f"Format titles as Markdown headers (# or ##). "
+                f"DO NOT add any conversational filler, just return the translated Markdown content."
+            )
+            
+            vision_model = self._model if "llama" not in self._model.lower() else "gpt-4o-mini"
+            response = self._client.chat.completions.create(
+                model=vision_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{encoded_string}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                temperature=0.0,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return f"Erro ao extrair conteúdo da imagem: {str(e)}"
 
 
 def create_translation_service(

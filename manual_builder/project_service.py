@@ -23,6 +23,9 @@ header-includes:
   - \usepackage{{sectsty}}
   - \usepackage{{amsmath}}
   - \usepackage{{unicode-math}}
+  - \usepackage{{longtable}}
+  - \usepackage{{booktabs}}
+  - \usepackage{{array}}
   - \allsectionsfont{{\color{{orange}}}}
   - \usepackage{{fancyhdr}}
   - \pagestyle{{fancy}}
@@ -31,7 +34,7 @@ header-includes:
   - \fancyhead[LO,RE]{{\fontsize{{8}}{{10}}\selectfont Technical Documentation by E2PS}}
   - \fancyhead[RO,LE]{{\includegraphics[width = 0.13\textwidth]{{LogoHeader.png}}}}
   - \fancyfoot{{}}
-  - \renewcommand{{\headrulewidth}}{{0pt}}
+  - \renewcommand{{\headrulewidth}}{{0.5pt}}
   - \renewcommand{{\footrulewidth}}{{0pt}}
   - \hoffset 0cm
   - \voffset -0.7cm
@@ -43,6 +46,8 @@ output:
   pdf_document:
     includes: null
     latex_engine: lualatex
+    df_print: kable
+    highlight: tango
   html_document:
     toc: yes
     toc_float: yes
@@ -193,11 +198,13 @@ class ProjectExportService:
             if translator is not None and language != source_language:
                 language_title = translator.translate_text(title, language)
                 language_sections = []
+                from dataclasses import replace
                 for section in sections:
                     sec_title = translator.translate_text(section.title, language)
                     sec_content = []
                     for item in section.content:
                         if isinstance(item, PdfPage):
+                            # Preservar o export_mode ao criar a estrutura traduzida
                             sec_content.append(item)
                         elif isinstance(item, str) and item.strip():
                             sec_content.append(translator.translate_text(item, language))
@@ -325,19 +332,30 @@ class ProjectExportService:
                     rendered_blocks.append(item)
             elif isinstance(item, PdfPage):
                 page_counter += 1
-                target = image_dir / item.filename
-                if translate_images and translator is not None:
-                    translator.translate_page(item.image_path, target, language)
+                
+                # Decidir entre exportar como imagem traduzida ou texto estruturado (OCR/IA)
+                if translate_images and translator is not None and getattr(item, "export_mode", "image") == "text":
+                    # Extrair conteúdo estruturado (tabelas e texto) usando IA
+                    structured_text = translator.extract_structured_content(item.image_path, language)
+                    rendered_blocks.append(structured_text)
                 else:
-                    shutil.copy2(item.image_path, target)
+                    # Exportar como imagem (com ou sem tradução visual)
+                    target = image_dir / item.filename
+                    if translate_images and translator is not None:
+                        translator.translate_page(item.image_path, target, language)
+                    else:
+                        shutil.copy2(item.image_path, target)
+                    
+                    rendered_blocks.append(
+                        "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
+                        "fig.align='center', out.width='100%%'}\n"
+                        "knitr::include_graphics('img/%s')\n```"
+                        % (section_index, subsection_index, page_counter, item.filename)
+                    )
+                
                 if on_page_exported is not None:
                     on_page_exported()
-                rendered_blocks.append(
-                    "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
-                    "fig.align='center', out.width='100%%'}\n"
-                    "knitr::include_graphics('img/%s')\n```"
-                    % (section_index, subsection_index, page_counter, item.filename)
-                )
+                    
         return "\n\n".join(rendered_blocks)
 
     def _copy_standard_assets(self, project_dir: Path, cover_image_path: Path | None = None) -> None:

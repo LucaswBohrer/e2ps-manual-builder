@@ -16,6 +16,7 @@ class PdfPage:
     thumbnail_path: Path
     variant: int = 1
     extracted_text: str = ""
+    export_mode: str = "image"  # "image" or "text"
 
     @property
     def filename(self) -> str:
