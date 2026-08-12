@@ -1,12 +1,15 @@
-# Relatório Final - Correções de IA (E2PS Manual Builder)
+# Relatório Final - Atualizações e Correções (E2PS Manual Builder)
 
-O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para corrigir definitivamente o erro ao clicar em "Suggest Structure":
+O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para resolver todas as observações levantadas:
 
-1. **Correção do Erro `AttributeError`**:
-   - O método `ai_suggest_structure` foi corrigido, eliminando a chamada ao método inexistente e garantindo que as sugestões de estrutura sejam exibidas corretamente no painel de chat.
+1. **Correção do Erro `test_connection`**:
+   - Adicionada a implementação correta do método `test_connection` na classe `ManualAIService`, eliminando o erro `AttributeError`.
 
-2. **Adição do Botão "Testar Conexão"**:
-   - Um botão dedicado foi integrado ao lado dos campos de configuração para que você possa verificar se sua API Key (como a da Groq) e URL base estão funcionando perfeitamente antes de interagir.
+2. **IA que Realmente Lê o PDF**:
+   - Agora, ao abrir o PDF, o aplicativo extrai automaticamente o texto real de cada página (`PyMuPDF`). Quando você conversa com a IA ou pede sugestões de estrutura, a IA lê o conteúdo textual real das páginas e fornece respostas precisas e contextualizadas (e não respostas genéricas).
 
-3. **Sincronização com o GitHub**:
-   - Todas as correções foram testadas com sucesso e enviadas (*commit and push*) para o repositório oficial no GitHub.
+3. **Layout Aprimorado para Pré-visualização**:
+   - A pré-visualização da página foi reposicionada em uma área de rolagem ampla (*Scroll Area*) com largura redimensionada para 700px, permitindo visualizar com nitidez e conforto todas as páginas e detalhes do PDF.
+
+4. **Sincronização com o GitHub**:
+   - Todas as modificações foram testadas e enviadas (*commit and push*) com sucesso para o repositório oficial no GitHub.
