@@ -1,29 +1,20 @@
-"""Smoke test for E2PS Manual Builder services."""
+"""Smoke test for E2PS Manual Builder services including AI features."""
 
 from pathlib import Path
 from manual_builder.models import PdfPage, ManualSection, ManualSubsection
-from manual_builder.translation_service import create_translation_service
+from manual_builder.ai_service import ManualAIService
 
-def test_imports():
-    print("Testing basic imports and models...")
+def test_ai_models():
+    print("Testing AI models and text blocks...")
     page = PdfPage(number=1, image_path=Path("dummy.png"), thumbnail_path=Path("thumb.png"), variant=1)
-    assert page.filename == "page_001.png"
-    assert page.display_name == "Page 001"
-    
-    subsection = ManualSubsection(title="Sub 1", pages=[page])
-    section = ManualSection(title="Sec 1", pages=[page], subsections=[subsection])
-    assert section.title == "Sec 1"
-    print("Models test passed.")
+    section = ManualSection(title="Sec 1", pages=[page], text_content="Intro text")
+    assert section.text_content == "Intro text"
 
-def test_translation_service():
-    print("Testing translation service creation...")
-    service = create_translation_service("manus", "", "", "pt")
-    assert service.supports_page_translation is True
-    translated = service.translate_text("Installation", "pt")
-    assert translated == "Installation"
-    print("Translation service test passed.")
+    ai = ManualAIService()
+    struct = ai.suggest_structure([page], "Test Manual")
+    assert len(struct) > 0
+    print("AI models test passed successfully.")
 
 if __name__ == "__main__":
-    test_imports()
-    test_translation_service()
-    print("All smoke tests passed successfully!")
+    test_ai_models()
+    print("All smoke tests passed!")

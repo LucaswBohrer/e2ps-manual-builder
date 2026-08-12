@@ -1,4 +1,4 @@
-"""Main desktop window and user interaction orchestration."""
+"""Main graphical window for E2PS Manual Builder."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSplitter,
+    QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
     QToolBar,
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from manual_builder.models import ManualSection, ManualSubsection, PdfPage
+from manual_builder.ai_service import ManualAIService
 from manual_builder.crop_dialog import CropDialog
 from manual_builder.export_worker import MultilingualExportWorker
 from manual_builder.project_service import ProjectExportService
@@ -39,20 +41,21 @@ from manual_builder.workers import PdfRenderWorker
 
 
 class MainWindow(QMainWindow):
-    """E2PS Manual Builder primary user interface."""
+    """Main application window managing PDF extraction, sections, and multilingual export."""
 
     def __init__(self) -> None:
         super().__init__()
-        self._temporary_images = TemporaryDirectory(prefix="e2ps_manual_")
+        self.setWindowTitle("E2PS Manual Builder (AI Powered)")
+        self.resize(1300, 820)
+
         self._pages: list[PdfPage] = []
         self._sections: list[ManualSection] = []
-        self._worker: PdfRenderWorker | None = None
+        self._temp_dir = TemporaryDirectory(prefix="e2ps_manual_")
+        self._render_worker: PdfRenderWorker | None = None
         self._export_worker: MultilingualExportWorker | None = None
-        self.setWindowTitle("E2PS Manual Builder")
-        self.resize(1180, 760)
-        self._build_ui()
+        self._ai_service = ManualAIService()
+        self._cover_image_path: Path | None = None
 
-    def _build_ui(self) -> None:
         toolbar = QToolBar("Actions")
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
@@ -108,11 +111,18 @@ class MainWindow(QMainWindow):
         page_layout.addWidget(self.clear_selection_button)
         page_layout.addWidget(self.crop_page_button)
         page_layout.addWidget(self.page_list)
+
+        # AI Assistant Button for automated structuring
+        self.ai_suggest_button = QPushButton("🤖 AI Suggest Manual Structure")
+        self.ai_suggest_button.setEnabled(False)
+        self.ai_suggest_button.clicked.connect(self.ai_suggest_structure)
+
         self.section_name = QLineEdit()
         self.section_name.setPlaceholderText("Section name, e.g. Installation")
         self.add_section_button = QPushButton("Create Section from Checked Pages")
         self.add_section_button.setEnabled(False)
         self.add_section_button.clicked.connect(self.add_section)
+        
         self.section_tree = QTreeWidget()
         self.section_tree.setHeaderHidden(True)
         self.remove_section_button = QPushButton("Remove Selected Section")
@@ -121,15 +131,32 @@ class MainWindow(QMainWindow):
         self.rename_section_button = QPushButton("Rename Selected Item")
         self.rename_section_button.setEnabled(False)
         self.rename_section_button.clicked.connect(self.rename_selected_item)
+        
         self.subsection_name = QLineEdit()
         self.subsection_name.setPlaceholderText("Subsection name")
         self.add_subsection_button = QPushButton("Add Subsection to Selected Section")
         self.add_subsection_button.setEnabled(False)
         self.add_subsection_button.clicked.connect(self.add_subsection)
+
+        # Text editing between images for selected section/subsection
+        self.section_text_input = QTextEdit()
+        self.section_text_input.setPlaceholderText("Descriptive or technical text to appear between/alongside images in this section...")
+        self.section_text_input.setMaximumHeight(100)
+        self.section_text_input.setEnabled(False)
+        
+        self.save_text_button = QPushButton("Save Section Text")
+        self.save_text_button.setEnabled(False)
+        self.save_text_button.clicked.connect(self.save_section_text)
+
+        self.ai_generate_text_button = QPushButton("🤖 AI Generate Technical Text")
+        self.ai_generate_text_button.setEnabled(False)
+        self.ai_generate_text_button.clicked.connect(self.ai_generate_section_text)
+
         self.section_tree.currentItemChanged.connect(self._section_selection_changed)
 
-        section_panel = QGroupBox("Manual Sections")
+        section_panel = QGroupBox("Manual Sections & AI Assistant")
         section_layout = QVBoxLayout(section_panel)
+        section_layout.addWidget(self.ai_suggest_button)
         section_layout.addWidget(QLabel("1. Check pages in the left panel."))
         section_layout.addWidget(QLabel("2. Name the section."))
         section_layout.addWidget(self.section_name)
@@ -139,8 +166,17 @@ class MainWindow(QMainWindow):
         section_layout.addWidget(self.subsection_name)
         section_layout.addWidget(self.add_subsection_button)
         section_layout.addWidget(self.section_tree)
+        section_layout.addWidget(QLabel("Section Descriptive Text (between images):"))
+        section_layout.addWidget(self.section_text_input)
+        
+        text_btn_layout = QHBoxLayout()
+        text_btn_layout.addWidget(self.save_text_button)
+        text_btn_layout.addWidget(self.ai_generate_text_button)
+        section_layout.addLayout(text_btn_layout)
+        
         section_layout.addWidget(self.remove_section_button)
-        language_group = QGroupBox("Translation Output")
+
+        language_group = QGroupBox("Translation & Cover")
         language_layout = QVBoxLayout(language_group)
         language_layout.addWidget(QLabel("Source language:"))
         self.source_language = QComboBox()
@@ -148,7 +184,7 @@ class MainWindow(QMainWindow):
         self.source_language.addItem("English", "en")
         self.source_language.addItem("Spanish", "es")
         language_layout.addWidget(self.source_language)
-        language_layout.addWidget(QLabel("Create language folders (up to 3):"))
+        language_layout.addWidget(QLabel("Create language folders:"))
         self.pt_language = QCheckBox("Portuguese (pt)")
         self.en_language = QCheckBox("English (en)")
         self.es_language = QCheckBox("Spanish (es)")
@@ -165,8 +201,7 @@ class MainWindow(QMainWindow):
         self.translation_endpoint.setVisible(False)
         self.api_key_input = QLineEdit("")
         self.api_key_input.setVisible(False)
-        
-        # Cover Image selection
+
         language_layout.addWidget(QLabel("Manual Cover Image (Capa.png):"))
         cover_layout = QHBoxLayout()
         self.cover_path_input = QLineEdit()
@@ -188,66 +223,61 @@ class MainWindow(QMainWindow):
         splitter.addWidget(page_panel)
         splitter.addWidget(section_panel)
         splitter.addWidget(self.preview)
-        splitter.setStretchFactor(2, 1)
+        splitter.setSizes([260, 420, 620])
+        self.setCentralWidget(splitter)
 
         self.progress = QProgressBar()
         self.progress.setVisible(False)
-        self.statusBar().showMessage("Ready")
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.addWidget(splitter)
-        layout.addWidget(self.progress)
-        self.setCentralWidget(container)
+        self.statusBar().addPermanentWidget(self.progress)
 
     def open_pdf(self) -> None:
-        """Ask the user for a PDF and begin thumbnail rendering."""
-        filename, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF files (*.pdf)")
-        if not filename:
+        """Open a PDF file and start background rendering."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open PDF Manual", "", "PDF Documents (*.pdf)"
+        )
+        if not file_path:
             return
-        self.page_list.clear()
         self._pages.clear()
         self._sections.clear()
+        self.page_list.clear()
         self.section_tree.clear()
-        self.preview.setText("Rendering pages…")
-        self.progress.setRange(0, 0)
-        self.progress.setVisible(True)
         self.export_button.setEnabled(False)
-        self.add_section_button.setEnabled(False)
         self.select_all_button.setEnabled(False)
         self.clear_selection_button.setEnabled(False)
         self.crop_page_button.setEnabled(False)
-        image_dir = Path(self._temporary_images.name) / "pages"
-        self._worker = PdfRenderWorker(Path(filename), image_dir)
-        self._worker.progress_changed.connect(self._update_progress)
-        self._worker.completed.connect(self._rendering_finished)
-        self._worker.failed.connect(self._rendering_failed)
-        self._worker.start()
-        self.statusBar().showMessage("Rendering PDF…")
+        self.ai_suggest_button.setEnabled(False)
 
-    def _update_progress(self, current: int, total: int) -> None:
-        self.progress.setRange(0, total)
-        self.progress.setValue(current)
+        self._render_worker = PdfRenderWorker(Path(file_path), Path(self._temp_dir.name))
+        self._render_worker.progress_changed.connect(self._update_render_progress)
+        self._render_worker.page_rendered.connect(self._page_rendered)
+        self._render_worker.completed.connect(self._rendering_completed)
+        self._render_worker.failed.connect(self._rendering_failed)
 
-    def _rendering_finished(self, pages: list[PdfPage]) -> None:
-        self._pages = pages
-        for page in pages:
-            item = QListWidgetItem(page.display_name)
-            item.setData(Qt.ItemDataRole.UserRole, page)
-            item.setCheckState(Qt.CheckState.Checked)
-            item.setIcon(QIcon(str(page.thumbnail_path)))
-            item.setSizeHint(QSize(0, 42))
-            self.page_list.addItem(item)
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress.setVisible(True)
+        self._render_worker.start()
+        self.statusBar().showMessage("Rendering PDF pages...")
+
+    def _update_render_progress(self, percent: int) -> None:
+        self.progress.setValue(percent)
+
+    def _page_rendered(self, page: PdfPage) -> None:
+        self._pages.append(page)
+        item = QListWidgetItem(page.display_name)
+        item.setData(Qt.ItemDataRole.UserRole, page)
+        item.setCheckState(Qt.CheckState.Unchecked)
+        item.setIcon(QIcon(str(page.thumbnail_path)))
+        item.setSizeHint(QSize(0, 42))
+        self.page_list.addItem(item)
+
+    def _rendering_completed(self, total: int) -> None:
         self.progress.setVisible(False)
-        self.export_button.setEnabled(bool(pages))
-        self.add_section_button.setEnabled(bool(pages))
-        self.select_all_button.setEnabled(bool(pages))
-        self.clear_selection_button.setEnabled(bool(pages))
-        self.crop_page_button.setEnabled(bool(pages))
-        if pages:
-            self.page_list.setCurrentRow(0)
-        self.statusBar().showMessage(
-            f"{len(pages)} pages ready. Check pages and create sections."
-        )
+        self.select_all_button.setEnabled(True)
+        self.clear_selection_button.setEnabled(True)
+        self.crop_page_button.setEnabled(True)
+        self.ai_suggest_button.setEnabled(bool(self._pages))
+        self.statusBar().showMessage(f"Successfully rendered {total} pages")
 
     def _rendering_failed(self, error: str) -> None:
         self.progress.setVisible(False)
@@ -268,28 +298,16 @@ class MainWindow(QMainWindow):
         ))
 
     def export_project(self) -> None:
-        """Export the selected pages into a new R Markdown project."""
-        if not self._sections:
-            QMessageBox.warning(
-                self,
-                "No sections created",
-                "Create at least one section with checked pages before exporting.",
-            )
-            return
+        """Validate input and start multilingual background export."""
         languages = self._selected_languages()
         if not languages:
-            QMessageBox.warning(
-                self,
-                "No languages selected",
-                "Choose at least one output language.",
-            )
+            QMessageBox.warning(self, "Languages required", "Select at least one output language.")
             return
+        if not self._sections:
+            QMessageBox.warning(self, "Sections required", "Create at least one section before exporting.")
+            return
+
         source_language = self.source_language.currentData()
-        api_key = self.api_key_input.text().strip()
-        provider = self.translation_provider.currentData()
-        endpoint = self.translation_endpoint.text().strip()
-        # Using Manus AI integrated translation
-        pass
         destination = QFileDialog.getExistingDirectory(self, "Choose project location")
         if not destination:
             return
@@ -302,9 +320,9 @@ class MainWindow(QMainWindow):
             self._publication_date(),
             languages,
             source_language,
-            provider,
-            api_key,
-            endpoint,
+            "manus",
+            "",
+            "",
             cover_image_path=cover_path,
         )
         self._export_worker.progress_changed.connect(self._update_export_progress)
@@ -314,28 +332,19 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(True)
         self.export_button.setEnabled(False)
         self._export_worker.start()
-        self.statusBar().showMessage("Exporting language projects and translating pages…")
+        self.statusBar().showMessage("Exporting language projects and translating pages with Manus AI…")
 
     def add_section(self) -> None:
         """Create a named section from currently checked page items."""
         title = self.section_name.text().strip()
         pages = self._checked_pages()
         if not title:
-            QMessageBox.warning(self, "Section name required", "Enter a section name.")
+            QMessageBox.warning(self, "Section name required", "Enter a title for the section.")
             return
-        if not pages:
-            QMessageBox.warning(
-                self,
-                "No pages checked",
-                "Check one or more pages for this section.",
-            )
-            return
-
-        self._sections.append(ManualSection(title=title, pages=pages, subsections=[]))
-        self._refresh_sections()
-        for index in range(self.page_list.count()):
-            self.page_list.item(index).setCheckState(Qt.CheckState.Unchecked)
+        self._sections.append(ManualSection(title=title, pages=pages))
         self.section_name.clear()
+        self.deselect_all_pages()
+        self._refresh_sections()
         self.export_button.setEnabled(True)
         self.statusBar().showMessage(f"Section '{title}' created with {len(pages)} pages")
 
@@ -351,6 +360,10 @@ class MainWindow(QMainWindow):
             self._sections[section_index].subsections.pop(subsection_index)
         self._refresh_sections()
         self.export_button.setEnabled(bool(self._sections))
+        self.section_text_input.clear()
+        self.section_text_input.setEnabled(False)
+        self.save_text_button.setEnabled(False)
+        self.ai_generate_text_button.setEnabled(False)
 
     def _checked_pages(self) -> list[PdfPage]:
         """Return pages checked in the source page list, in PDF order."""
@@ -443,11 +456,23 @@ class MainWindow(QMainWindow):
         current: QTreeWidgetItem | None,
         previous: QTreeWidgetItem | None,
     ) -> None:
-        """Enable section actions only when an item in the structure is selected."""
+        """Enable section actions and load section text when an item is selected."""
         has_selection = current is not None
         self.remove_section_button.setEnabled(has_selection)
         self.rename_section_button.setEnabled(has_selection)
         self.add_subsection_button.setEnabled(has_selection)
+        self.section_text_input.setEnabled(has_selection)
+        self.save_text_button.setEnabled(has_selection)
+        self.ai_generate_text_button.setEnabled(has_selection)
+
+        if current is not None:
+            item_type, section_index, subsection_index = current.data(0, Qt.ItemDataRole.UserRole)
+            if item_type == "section":
+                self.section_text_input.setPlainText(self._sections[section_index].text_content)
+            else:
+                self.section_text_input.setPlainText(self._sections[section_index].subsections[subsection_index].text_content)
+        else:
+            self.section_text_input.clear()
 
     def rename_selected_item(self) -> None:
         """Rename the selected section or subsection using the section-name field."""
@@ -483,6 +508,73 @@ class MainWindow(QMainWindow):
         self.subsection_name.clear()
         self.deselect_all_pages()
         self._refresh_sections()
+
+    def save_section_text(self) -> None:
+        """Save text content for the currently selected section or subsection."""
+        item = self.section_tree.currentItem()
+        if item is None:
+            return
+        text = self.section_text_input.toPlainText()
+        item_type, section_index, subsection_index = item.data(0, Qt.ItemDataRole.UserRole)
+        if item_type == "section":
+            self._sections[section_index].text_content = text
+        else:
+            self._sections[section_index].subsections[subsection_index].text_content = text
+        self.statusBar().showMessage("Section descriptive text saved successfully.")
+
+    def ai_suggest_structure(self) -> None:
+        """Use Manus AI to automatically suggest manual sections and page allocation."""
+        if not self._pages:
+            QMessageBox.warning(self, "No pages", "Open a PDF first.")
+            return
+        
+        self.statusBar().showMessage("Manus AI is analyzing pages and structuring the manual...")
+        self.progress.setRange(0, 0)
+        self.progress.setVisible(True)
+        self.ai_suggest_button.setEnabled(False)
+
+        try:
+            suggested = self._ai_service.suggest_structure(self._pages, self.title_input.text().strip())
+            if suggested:
+                self._sections = suggested
+                self._refresh_sections()
+                self.export_button.setEnabled(True)
+                QMessageBox.information(
+                    self,
+                    "AI Structure Applied",
+                    f"Manus AI successfully structured the manual into {len(suggested)} main sections with descriptive text!",
+                )
+        except Exception as error:
+            QMessageBox.critical(self, "AI Error", f"Could not generate structure: {error}")
+        finally:
+            self.progress.setVisible(False)
+            self.ai_suggest_button.setEnabled(True)
+            self.statusBar().showMessage("AI structure suggestion complete")
+
+    def ai_generate_section_text(self) -> None:
+        """Use Manus AI to generate professional technical text for the selected section."""
+        item = self.section_tree.currentItem()
+        if item is None:
+            QMessageBox.warning(self, "Select Section", "Choose a section or subsection first.")
+            return
+        
+        item_type, section_index, subsection_index = item.data(0, Qt.ItemDataRole.UserRole)
+        title = (
+            self._sections[section_index].title
+            if item_type == "section"
+            else self._sections[section_index].subsections[subsection_index].title
+        )
+
+        self.statusBar().showMessage(f"Generating technical text for '{title}' via Manus AI...")
+        try:
+            generated = self._ai_service.generate_section_text(title, self.title_input.text().strip())
+            self.section_text_input.setPlainText(generated)
+            self.save_section_text()
+            QMessageBox.information(self, "AI Text Generated", f"Technical text generated successfully for '{title}'!")
+        except Exception as error:
+            QMessageBox.critical(self, "AI Error", f"Could not generate text: {error}")
+        finally:
+            self.statusBar().showMessage("Ready")
 
     def _publication_date(self) -> str:
         """Return the E2PS publication date based on selected year and semester."""

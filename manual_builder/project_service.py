@@ -190,20 +190,16 @@ class ProjectExportService:
             language_sections = sections
             if translator is not None and language != source_language:
                 language_title = translator.translate_text(title, language)
-                language_sections = [
-                    ManualSection(
-                        title=translator.translate_text(section.title, language),
-                        pages=section.pages,
-                        subsections=[
-                            ManualSubsection(
-                                title=translator.translate_text(subsection.title, language),
-                                pages=subsection.pages,
-                            )
-                            for subsection in section.subsections
-                        ],
-                    )
-                    for section in sections
-                ]
+                language_sections = []
+                for section in sections:
+                    sec_title = translator.translate_text(section.title, language)
+                    sec_text = translator.translate_text(section.text_content, language) if section.text_content else ""
+                    subsections = []
+                    for sub in section.subsections:
+                        sub_title = translator.translate_text(sub.title, language)
+                        sub_text = translator.translate_text(sub.text_content, language) if sub.text_content else ""
+                        subsections.append(ManualSubsection(title=sub_title, pages=sub.pages, text_content=sub_text))
+                    language_sections.append(ManualSection(title=sec_title, pages=section.pages, subsections=subsections, text_content=sec_text))
 
             pages_in_language = sum(
                 len(section.pages)
@@ -257,7 +253,7 @@ class ProjectExportService:
 
         section_blocks: list[str] = []
         for section_index, section in enumerate(sections, start=1):
-            section_content = self._page_blocks(
+            page_content = self._page_blocks(
                 section.pages,
                 section_index,
                 0,
@@ -267,9 +263,15 @@ class ProjectExportService:
                 translate_images,
                 on_page_exported,
             )
+            section_parts = []
+            if section.text_content:
+                section_parts.append(section.text_content)
+            if page_content:
+                section_parts.append(page_content)
+
             subsection_blocks: list[str] = []
             for subsection_index, subsection in enumerate(section.subsections, start=1):
-                subsection_pages = self._page_blocks(
+                sub_page_content = self._page_blocks(
                     subsection.pages,
                     section_index,
                     subsection_index,
@@ -279,9 +281,16 @@ class ProjectExportService:
                     translate_images,
                     on_page_exported,
                 )
-                subsection_blocks.append(f"## {subsection.title}\n\n{subsection_pages}")
+                sub_parts = []
+                if subsection.text_content:
+                    sub_parts.append(subsection.text_content)
+                if sub_page_content:
+                    sub_parts.append(sub_page_content)
+                sub_joined = "\n\n".join(sub_parts)
+                subsection_blocks.append(f"## {subsection.title}\n\n{sub_joined}")
+
             all_content = "\n\n".join(
-                part for part in [section_content, "\n\n".join(subsection_blocks)] if part
+                part for part in ["\n\n".join(section_parts), "\n\n".join(subsection_blocks)] if part
             )
             section_blocks.append(f"# {section.title} {{.tabset .tabset-fade}}\n\n{all_content}")
 
@@ -328,7 +337,7 @@ class ProjectExportService:
         for asset in self._asset_directory.iterdir():
             if asset.is_file():
                 if asset.name.lower() == "capa.png" and cover_image_path is not None and cover_image_path.is_file():
-                    continue  # Will copy custom cover below
+                    continue
                 shutil.copy2(asset, project_dir / asset.name)
         
         if cover_image_path is not None and cover_image_path.is_file():

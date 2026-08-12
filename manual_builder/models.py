@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -31,16 +31,18 @@ class PdfPage:
 
 @dataclass(slots=True)
 class ManualSubsection:
-    """A user-named subsection that owns selected PDF page variants."""
+    """A user-named subsection that owns selected PDF page variants and optional descriptive text."""
 
     title: str
     pages: list[PdfPage]
+    text_content: str = ""
 
 
 @dataclass(slots=True)
 class ManualSection:
-    """A user-named manual section associated with selected PDF pages."""
+    """A user-named manual section associated with selected PDF pages and optional descriptive text."""
 
     title: str
     pages: list[PdfPage]
-    subsections: list[ManualSubsection]
+    subsections: list[ManualSubsection] = field(default_factory=list)
+    text_content: str = ""
