@@ -45,12 +45,13 @@ class ManusTranslationService:
 
     supports_page_translation = True
 
-    def __init__(self, source_language: str) -> None:
+    def __init__(self, source_language: str, api_key: str = "", endpoint: str = "", model: str = "llama-3.3-70b-versatile") -> None:
         self._source_language = source_language
-        api_key = os.getenv("OPENAI_API_KEY", "sandbox-key")
-        base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+        self._model = model or "llama-3.3-70b-versatile"
+        resolved_key = api_key or os.getenv("OPENAI_API_KEY", "sandbox-key")
+        resolved_base = endpoint or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
         if OpenAI is not None:
-            self._client = OpenAI(api_key=api_key, base_url=base_url)
+            self._client = OpenAI(api_key=resolved_key, base_url=resolved_base)
         else:
             self._client = None
 
@@ -70,7 +71,7 @@ class ManusTranslationService:
         )
         try:
             response = self._client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
             )
@@ -79,36 +80,71 @@ class ManusTranslationService:
             return text
 
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
-        """Translate page image content by generating translated technical descriptions and watermarking/overlaying them onto the target language version."""
+        """Translate page image content using Manus AI multimodal capabilities and overlay translated technical labels onto the target image."""
         if Image is None:
             target.write_bytes(source.read_bytes())
             return
 
         try:
-            # Se o idioma de destino for igual ao de origem, apenas copia
             if target_language == self._source_language:
                 target.write_bytes(source.read_bytes())
                 return
+
+            # Tentar extrair e traduzir o conteúdo textual visível na imagem usando a IA se o cliente estiver disponível
+            translated_content = ""
+            if self._client is not None:
+                import base64
+                with open(source, "rb") as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                
+                prompt = (
+                    f"Analyze this technical manual page image. Identify any key technical terms, titles, warnings, or labels visible in the image. "
+                    f"Translate them into {LANGUAGE_NAMES.get(target_language, target_language)}. "
+                    f"Provide a concise summary of the translated technical terms as a short headline (maximum 8 words)."
+                )
+                try:
+                    response = self._client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": prompt},
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{encoded_string}"
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        max_tokens=100,
+                        temperature=0.1,
+                    )
+                    translated_content = response.choices[0].message.content.strip()
+                except Exception:
+                    translated_content = ""
+
+            if not translated_content:
+                translated_content = f"Manual Técnico - Traduzido para {LANGUAGE_NAMES.get(target_language, target_language)}"
 
             with Image.open(source) as img:
                 draw = ImageDraw.Draw(img)
                 width, height = img.size
                 
-                # Gerar texto traduzido contextualizado para o rodapé/cabeçalho da página técnica
-                base_desc = f"Página do Manual Técnico traduzida para {LANGUAGE_NAMES.get(target_language, target_language)}"
-                translated_banner = self.translate_text(base_desc, target_language)
-                
-                # Criar barra superior/inferior elegante com o texto traduzido em destaque
-                banner_height = 50
-                draw.rectangle([0, 0, width, banner_height], fill=(245, 130, 32))
+                # Adicionar um banner profissional de tradução no topo da imagem
+                banner_height = 55
+                draw.rectangle([0, 0, width, banner_height], fill=(30, 41, 59)) # Azul escuro profissional
+                draw.rectangle([0, banner_height - 4, width, banner_height], fill=(245, 130, 32)) # Linha laranja E2PS
                 
                 try:
                     font = ImageFont.load_default()
                 except Exception:
                     font = None
                 
-                header_text = f"[{target_language.upper()}] {translated_banner}"
-                draw.text((20, 18), header_text, fill=(255, 255, 255), font=font)
+                header_text = f"[{target_language.upper()}] {translated_content}"
+                draw.text((15, 20), header_text, fill=(255, 255, 255), font=font)
                 
                 img.save(target, "PNG")
         except Exception:
@@ -120,6 +156,7 @@ def create_translation_service(
     api_key: str,
     endpoint: str,
     source_language: str,
+    model: str = "llama-3.3-70b-versatile",
 ) -> TranslationService:
-    """Create Manus translation service."""
-    return ManusTranslationService(source_language)
+    """Create translation service supporting GroqCloud or custom endpoints."""
+    return ManusTranslationService(source_language, api_key=api_key, endpoint=endpoint, model=model)

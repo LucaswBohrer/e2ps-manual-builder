@@ -437,6 +437,9 @@ class MainWindow(QMainWindow):
         if not destination:
             return
         cover_path = getattr(self, "_cover_image_path", None)
+        key = self.api_key_input.text().strip()
+        endpoint = self.base_url_input.text().strip()
+        model_name = self.model_input.text().strip() or "llama-3.3-70b-versatile"
         self._export_worker = MultilingualExportWorker(
             Path(destination),
             self.title_input.text().strip(),
@@ -445,9 +448,10 @@ class MainWindow(QMainWindow):
             self._publication_date(),
             languages,
             source_language,
-            "manus",
-            "",
-            "",
+            "groq" if endpoint or key else "manus",
+            key,
+            endpoint,
+            model=model_name,
             cover_image_path=cover_path,
         )
         self._export_worker.progress_changed.connect(self._update_export_progress)

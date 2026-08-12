@@ -163,6 +163,7 @@ class ProjectExportService:
         manual_code: str,
         publication_date: str,
         on_progress: Callable[[int, int], None],
+        model: str = "llama-3.3-70b-versatile",
         cover_image_path: Path | None = None,
     ) -> Path:
         """Create independent language folders and translate non-source pages with AI."""
@@ -174,6 +175,7 @@ class ProjectExportService:
                 api_key,
                 translation_endpoint,
                 source_language,
+                model=model,
             )
             if requires_translation
             else None
