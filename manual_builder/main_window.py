@@ -182,14 +182,20 @@ class MainWindow(QMainWindow):
         ai_chat_group = QGroupBox("🤖 Manus AI Assistant & Chat")
         ai_chat_layout = QVBoxLayout(ai_chat_group)
         
-        # API Key input for local usage
+        # API Key & Base URL input for free providers (Groq, Together, etc.)
         api_key_layout = QHBoxLayout()
         self.api_key_input = QLineEdit()
-        self.api_key_input.setPlaceholderText("Cole sua API Key (OpenAI/Gratuita) opcional...")
+        self.api_key_input.setPlaceholderText("Cole sua API Key gratuita (ex: Groq, OpenAI)...")
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        save_key_button = QPushButton("Salvar Chave")
+        
+        self.base_url_input = QLineEdit()
+        self.base_url_input.setPlaceholderText("Base URL (ex: https://api.groq.com/openai/v1)")
+        
+        save_key_button = QPushButton("Salvar Configs")
         save_key_button.clicked.connect(self._save_api_key)
+        
         api_key_layout.addWidget(self.api_key_input)
+        api_key_layout.addWidget(self.base_url_input)
         api_key_layout.addWidget(save_key_button)
         ai_chat_layout.addLayout(api_key_layout)
 
@@ -604,11 +610,12 @@ class MainWindow(QMainWindow):
         self.chat_display.append(f"<br><b>🤖 Manus AI:</b> {reply}")
 
     def _save_api_key(self) -> None:
-        """Save user provided API key into AI service."""
+        """Save user provided API key and base URL into AI service."""
         key = self.api_key_input.text().strip()
-        self._ai_service.update_key(key)
-        QMessageBox.information(self, "Chave Salva", "Chave de API atualizada com sucesso no assistente de IA.")
-        self.statusBar().showMessage("Chave de API da IA atualizada.")
+        base_url = self.base_url_input.text().strip()
+        self._ai_service.update_key(key, base_url)
+        QMessageBox.information(self, "Configurações Salvas", "Chave de API e URL base atualizadas com sucesso no assistente de IA.")
+        self.statusBar().showMessage("Configurações de IA atualizadas.")
 
     def _browse_cover_image(self) -> None:
         """Open file dialog to select manual cover image."""
