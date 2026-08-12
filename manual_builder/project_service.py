@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 from typing import Callable
 
-from manual_builder.models import ManualSection, ManualSubsection
+from manual_builder.models import ManualSection, ManualSubsection, PdfPage
 from manual_builder.translation_service import (
     TranslationService,
     create_translation_service,
@@ -179,8 +179,8 @@ class ProjectExportService:
             else None
         )
         total_pages = sum(
-            len(section.pages)
-            + sum(len(subsection.pages) for subsection in section.subsections)
+            sum(1 for item in section.content if isinstance(item, PdfPage))
+            + sum(sum(1 for sub_item in sub.content if isinstance(sub_item, PdfPage)) for sub in section.subsections)
             for section in sections
         ) * len(languages)
         completed_pages = 0
@@ -193,17 +193,28 @@ class ProjectExportService:
                 language_sections = []
                 for section in sections:
                     sec_title = translator.translate_text(section.title, language)
-                    sec_text = translator.translate_text(section.text_content, language) if section.text_content else ""
+                    sec_content = []
+                    for item in section.content:
+                        if isinstance(item, PdfPage):
+                            sec_content.append(item)
+                        elif isinstance(item, str) and item.strip():
+                            sec_content.append(translator.translate_text(item, language))
+                    
                     subsections = []
                     for sub in section.subsections:
                         sub_title = translator.translate_text(sub.title, language)
-                        sub_text = translator.translate_text(sub.text_content, language) if sub.text_content else ""
-                        subsections.append(ManualSubsection(title=sub_title, pages=sub.pages, text_content=sub_text))
-                    language_sections.append(ManualSection(title=sec_title, pages=section.pages, subsections=subsections, text_content=sec_text))
+                        sub_content = []
+                        for sub_item in sub.content:
+                            if isinstance(sub_item, PdfPage):
+                                sub_content.append(sub_item)
+                            elif isinstance(sub_item, str) and sub_item.strip():
+                                sub_content.append(translator.translate_text(sub_item, language))
+                        subsections.append(ManualSubsection(title=sub_title, content=sub_content))
+                    language_sections.append(ManualSection(title=sec_title, content=sec_content, subsections=subsections))
 
             pages_in_language = sum(
-                len(section.pages)
-                + sum(len(subsection.pages) for subsection in section.subsections)
+                sum(1 for item in section.content if isinstance(item, PdfPage))
+                + sum(sum(1 for sub_item in sub.content if isinstance(sub_item, PdfPage)) for sub in section.subsections)
                 for section in sections
             )
             exported_in_language = 0
@@ -253,8 +264,8 @@ class ProjectExportService:
 
         section_blocks: list[str] = []
         for section_index, section in enumerate(sections, start=1):
-            page_content = self._page_blocks(
-                section.pages,
+            section_content_blocks = self._render_mixed_content(
+                section.content,
                 section_index,
                 0,
                 image_dir,
@@ -263,16 +274,11 @@ class ProjectExportService:
                 translate_images,
                 on_page_exported,
             )
-            section_parts = []
-            if section.text_content:
-                section_parts.append(section.text_content)
-            if page_content:
-                section_parts.append(page_content)
 
             subsection_blocks: list[str] = []
             for subsection_index, subsection in enumerate(section.subsections, start=1):
-                sub_page_content = self._page_blocks(
-                    subsection.pages,
+                sub_content_blocks = self._render_mixed_content(
+                    subsection.content,
                     section_index,
                     subsection_index,
                     image_dir,
@@ -281,16 +287,10 @@ class ProjectExportService:
                     translate_images,
                     on_page_exported,
                 )
-                sub_parts = []
-                if subsection.text_content:
-                    sub_parts.append(subsection.text_content)
-                if sub_page_content:
-                    sub_parts.append(sub_page_content)
-                sub_joined = "\n\n".join(sub_parts)
-                subsection_blocks.append(f"## {subsection.title}\n\n{sub_joined}")
+                subsection_blocks.append(f"## {subsection.title}\n\n{sub_content_blocks}")
 
             all_content = "\n\n".join(
-                part for part in ["\n\n".join(section_parts), "\n\n".join(subsection_blocks)] if part
+                part for part in [section_content_blocks, "\n\n".join(subsection_blocks)] if part
             )
             section_blocks.append(f"# {section.title} {{.tabset .tabset-fade}}\n\n{all_content}")
 
@@ -303,9 +303,9 @@ class ProjectExportService:
         )
         (project_dir / "manual.rmd").write_text(content, encoding="utf-8")
 
-    def _page_blocks(
+    def _render_mixed_content(
         self,
-        pages: list,
+        content_items: list[PdfPage | str],
         section_index: int,
         subsection_index: int,
         image_dir: Path,
@@ -314,23 +314,29 @@ class ProjectExportService:
         translate_images: bool,
         on_page_exported: Callable[[], None] | None,
     ) -> str:
-        """Export a list of page variants and return their R Markdown chunks."""
-        image_blocks: list[str] = []
-        for page_index, page in enumerate(pages, start=1):
-            target = image_dir / page.filename
-            if translate_images and translator is not None:
-                translator.translate_page(page.image_path, target, language)
-            else:
-                shutil.copy2(page.image_path, target)
-            if on_page_exported is not None:
-                on_page_exported()
-            image_blocks.append(
-                "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
-                "fig.align='center', out.width='100%%'}\n"
-                "knitr::include_graphics('img/%s')\n```"
-                % (section_index, subsection_index, page_index, page.filename)
-            )
-        return "\n\n".join(image_blocks)
+        """Render mixed list of PdfPages and text snippets in exact user order."""
+        rendered_blocks: list[str] = []
+        page_counter = 0
+        for item in content_items:
+            if isinstance(item, str):
+                if item.strip():
+                    rendered_blocks.append(item)
+            elif isinstance(item, PdfPage):
+                page_counter += 1
+                target = image_dir / item.filename
+                if translate_images and translator is not None:
+                    translator.translate_page(item.image_path, target, language)
+                else:
+                    shutil.copy2(item.image_path, target)
+                if on_page_exported is not None:
+                    on_page_exported()
+                rendered_blocks.append(
+                    "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
+                    "fig.align='center', out.width='100%%'}\n"
+                    "knitr::include_graphics('img/%s')\n```"
+                    % (section_index, subsection_index, page_counter, item.filename)
+                )
+        return "\n\n".join(rendered_blocks)
 
     def _copy_standard_assets(self, project_dir: Path, cover_image_path: Path | None = None) -> None:
         """Copy logo, typography and cover image shipped with the E2PS standard package."""

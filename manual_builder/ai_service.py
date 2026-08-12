@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
@@ -11,11 +10,11 @@ try:
 except ImportError:
     OpenAI = None
 
-from manual_builder.models import PdfPage, ManualSection, ManualSubsection
+from manual_builder.models import PdfPage
 
 
 class ManualAIService:
-    """Service utilizing Manus AI to suggest manual structures and generate technical content."""
+    """Service utilizing Manus AI to chat, suggest manual structures, and generate technical content."""
 
     def __init__(self) -> None:
         api_key = os.getenv("OPENAI_API_KEY", "sandbox-key")
@@ -24,68 +23,39 @@ class ManualAIService:
             self._client = OpenAI(api_key=api_key, base_url=base_url)
         else:
             self._client = None
+        self._chat_history = [
+            {"role": "system", "content": "You are a professional technical documentation assistant for E2PS manuals. Help the user structure manuals, choose which pages go into which sections, and write professional technical descriptions in Portuguese."}
+        ]
 
-    def suggest_structure(self, pages: list[PdfPage], manual_title: str) -> list[ManualSection]:
-        """Ask AI to analyze available pages and suggest a professional technical manual structure."""
-        if self._client is None or not pages:
-            # Fallback default structure if AI is unavailable
-            return [
-                ManualSection(
-                    title="Introduction and Overview",
-                    pages=pages[:min(2, len(pages))],
-                    text_content="General overview and technical specifications of the equipment.",
-                ),
-                ManualSection(
-                    title="Operation and Technical Information",
-                    pages=pages[min(2, len(pages)):],
-                    text_content="Step-by-step operating instructions and safety guidelines.",
-                ),
-            ]
+    def ask_ai(self, user_message: str, pages_summary: str = "") -> str:
+        """Chat with the AI assistant, asking for suggestions, page distribution, or writing help."""
+        if self._client is None:
+            return "Serviço de IA indisponível (OpenAI client não carregado)."
 
-        page_summary = ", ".join(f"Page {p.number}" for p in pages)
-        prompt = (
-            f"You are a technical documentation expert. We have a technical manual titled '{manual_title}' with {len(pages)} pages: [{page_summary}].\n"
-            f"Suggest a professional logical structure for this manual in JSON format. "
-            f"Return a JSON array of sections. Each section must have 'title' (string), 'text_content' (technical description in Portuguese), 'page_numbers' (list of integers), "
-            f"and optional 'subsections' (list of objects with 'title', 'text_content', and 'page_numbers').\n"
-            f"Return ONLY valid JSON with no markdown wrapping or extra text."
-        )
+        context_msg = f"Available pages in PDF: [{pages_summary}].\nUser query: {user_message}"
+        self._chat_history.append({"role": "user", "content": context_msg})
 
         try:
             response = self._client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
+                messages=self._chat_history,
+                temperature=0.4,
             )
-            raw_content = response.choices[0].message.content.strip()
-            if raw_content.startswith("```json"):
-                raw_content = raw_content[7:]
-            if raw_content.endswith("```"):
-                raw_content = raw_content[:-3]
-            data = json.loads(raw_content.strip())
+            reply = response.choices[0].message.content.strip()
+            self._chat_history.append({"role": "assistant", "content": reply})
+            return reply
+        except Exception as error:
+            return f"Erro ao comunicar com a IA: {error}"
 
-            page_map = {p.number: p for p in pages}
-            sections: list[ManualSection] = []
-
-            for item in data:
-                sec_title = item.get("title", "Section")
-                sec_text = item.get("text_content", "")
-                sec_page_nums = item.get("page_numbers", [])
-                sec_pages = [page_map[num] for num in sec_page_nums if num in page_map]
-
-                subsections: list[ManualSubsection] = []
-                for sub in item.get("subsections", []):
-                    sub_title = sub.get("title", "Subsection")
-                    sub_text = sub.get("text_content", "")
-                    sub_page_nums = sub.get("page_numbers", [])
-                    sub_pages = [page_map[num] for num in sub_page_nums if num in page_map]
-                    subsections.append(ManualSubsection(title=sub_title, pages=sub_pages, text_content=sub_text))
-
-                sections.append(ManualSection(title=sec_title, pages=sec_pages, subsections=subsections, text_content=sec_text))
-
-            return sections if sections else self._fallback_structure(pages)
-        except Exception:
-            return self._fallback_structure(pages)
+    def suggest_structure_text(self, pages: list[PdfPage], manual_title: str) -> str:
+        """Ask AI to analyze pages and give text suggestions on how to structure the manual."""
+        page_summary = ", ".join(f"Página {p.number}" for p in pages)
+        prompt = (
+            f"Analise as {len(pages)} páginas deste PDF ({page_summary}) para o manual '{manual_title}'. "
+            f"Sugira em português quais páginas devem pertencer a cada seção principal e subseção, "
+            f"explicando o raciocínio para que o usuário possa fazer os recortes necessários e organizar manualmente."
+        )
+        return self.ask_ai(prompt, page_summary)
 
     def generate_section_text(self, section_title: str, context_topic: str) -> str:
         """Generate professional technical descriptive text for a manual section using AI."""
@@ -105,18 +75,3 @@ class ManualAIService:
             return response.choices[0].message.content.strip()
         except Exception:
             return f"Descrição técnica oficial para {section_title}."
-
-    def _fallback_structure(self, pages: list[PdfPage]) -> list[ManualSection]:
-        """Fallback structure if JSON parsing fails."""
-        return [
-            ManualSection(
-                title="Visão Geral e Especificações",
-                pages=pages[:max(1, len(pages) // 2)],
-                text_content="Especificações técnicas gerais e introdução ao equipamento.",
-            ),
-            ManualSection(
-                title="Operação e Procedimentos",
-                pages=pages[max(1, len(pages) // 2):],
-                text_content="Instruções operacionais e diretrizes de segurança.",
-            ),
-        ]

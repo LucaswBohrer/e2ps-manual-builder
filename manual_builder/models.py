@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Union
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,18 +32,16 @@ class PdfPage:
 
 @dataclass(slots=True)
 class ManualSubsection:
-    """A user-named subsection that owns selected PDF page variants and optional descriptive text."""
+    """A user-named subsection that owns mixed content blocks (PdfPage or text snippets)."""
 
     title: str
-    pages: list[PdfPage]
-    text_content: str = ""
+    content: list[Union[PdfPage, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class ManualSection:
-    """A user-named manual section associated with selected PDF pages and optional descriptive text."""
+    """A user-named manual section associated with mixed content blocks and subsections."""
 
     title: str
-    pages: list[PdfPage]
+    content: list[Union[PdfPage, str]] = field(default_factory=list)
     subsections: list[ManualSubsection] = field(default_factory=list)
-    text_content: str = ""
