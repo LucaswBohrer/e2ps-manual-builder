@@ -641,22 +641,27 @@ class MainWindow(QMainWindow):
         self.ai_generate_text_button.setEnabled(has_selection)
 
     def rename_selected_item(self) -> None:
-        """Rename the selected section or subsection using the section-name field."""
-        title = self.section_name.text().strip()
+        """Rename selected section or subsection using dialog."""
         item = self.section_tree.currentItem()
-        if not title or item is None:
-            QMessageBox.warning(self, "Name required", "Enter a new name before renaming.")
+        if item is None:
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
         if not data:
             return
         item_type, section_index, subsection_index = data
-        if item_type == "section":
-            self._sections[section_index].title = title
-        else:
-            self._sections[section_index].subsections[subsection_index].title = title
-        self.section_name.clear()
-        self._refresh_sections()
+        target_obj = (
+            self._sections[section_index]
+            if item_type == "section"
+            else self._sections[section_index].subsections[subsection_index]
+        )
+        from PySide6.QtWidgets import QInputDialog
+        new_title, ok = QInputDialog.getText(
+            self, "Editar Título", "Novo título:", text=target_obj.title
+        )
+        if ok and new_title.strip():
+            target_obj.title = new_title.strip()
+            self._refresh_sections()
+            self.statusBar().showMessage(f"Título atualizado para '{new_title.strip()}'")
 
     def add_subsection(self) -> None:
         """Create a subsection under the selected section from checked pages."""

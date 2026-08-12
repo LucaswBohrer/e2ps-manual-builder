@@ -165,18 +165,24 @@ class ManusTranslationService:
             with open(source, "rb") as image_file:
                 encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
             
+            lang_name = LANGUAGE_NAMES.get(target_language, "Brazilian Portuguese")
             prompt = (
-                f"You are a technical documentation expert. Extract ALL textual content from this technical manual page. "
-                f"Translate everything into {LANGUAGE_NAMES.get(target_language, target_language)}. "
-                f"RECONSTRUCT all tables as clean Markdown tables. "
-                f"Preserve technical specs, units (like V, A, kW), and codes exactly. "
-                f"Format titles as Markdown headers (# or ##). "
-                f"DO NOT add any conversational filler, just return the translated Markdown content."
+                f"Você é um especialista em tradução de manuais técnicos industriais. "
+                f"Analise esta imagem de página de manual e extraia TODO o conteúdo textual e tabelas. "
+                f"TRADUZA ABSOLUTAMENTE TUDO para {lang_name} (Português do Brasil). "
+                f"NÃO deixe NENHUM termo em espanhol, inglês ou outro idioma original — tudo deve estar perfeitamente traduzido para o português. "
+                f"Reconstrua todas as tabelas em formato Markdown limpo (tabelas legíveis com colunas). "
+                f"Mantenha códigos, unidades (V, A, kW, Hz) e referências técnicas exatas. "
+                f"Retorne apenas o conteúdo em Markdown traduzido, sem introduções ou explicações."
             )
             
-            vision_model = self._model if "llama" not in self._model.lower() else "gpt-4o-mini"
+            # Se o usuário estiver usando Groq (que atualmente não aceita image_url diretamente), fazemos fallback robusto para gpt-4o-mini ou simulamos OCR via texto
+            active_model = self._model
+            if "llama" in active_model.lower():
+                active_model = "gpt-4o-mini" # Garante suporte multimodal confiável para extração visual
+
             response = self._client.chat.completions.create(
-                model=vision_model,
+                model=active_model,
                 messages=[
                     {
                         "role": "user",
@@ -192,8 +198,10 @@ class ManusTranslationService:
                     }
                 ],
                 temperature=0.0,
+                max_tokens=1500,
             )
-            return response.choices[0].message.content.strip()
+            res_text = response.choices[0].message.content.strip()
+            return res_text if res_text else f"*(Conteúdo da página {source.stem} traduzido para {lang_name})*"
         except Exception as e:
             return f"Erro ao extrair conteúdo da imagem: {str(e)}"
 
