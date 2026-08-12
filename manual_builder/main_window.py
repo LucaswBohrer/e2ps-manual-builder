@@ -498,11 +498,13 @@ class MainWindow(QMainWindow):
         self._export_worker.progress_changed.connect(self._update_export_progress)
         self._export_worker.completed.connect(self._export_finished)
         self._export_worker.failed.connect(self._export_failed)
-        self.progress.setRange(0, 0)
+        # Progresso percentual: evita a impressão de carregamento infinito.
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
         self.progress.setVisible(True)
         self.export_button.setEnabled(False)
         self._export_worker.start()
-        self.statusBar().showMessage("Exporting language projects and translating pages with Manus AI…")
+        self.statusBar().showMessage("Exportando projeto e analisando páginas com IA…")
 
     def add_section(self) -> None:
         """Create a named section from currently checked page items."""
@@ -807,7 +809,12 @@ class MainWindow(QMainWindow):
     def _update_export_progress(self, current: int, total: int) -> None:
         """Update progress bar during background export."""
         if total > 0:
-            self.progress.setValue(int((current / total) * 100))
+            percent = int((current / total) * 100)
+            self.progress.setRange(0, 100)
+            self.progress.setValue(percent)
+            self.statusBar().showMessage(
+                f"Exportando páginas: {current} de {total} ({percent}%)…"
+            )
 
     def _export_finished(self, project_dir: Path) -> None:
         """Handle successful export completion."""

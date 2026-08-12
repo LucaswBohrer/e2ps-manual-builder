@@ -332,10 +332,16 @@ class ProjectExportService:
                     rendered_blocks.append(item)
             elif isinstance(item, PdfPage):
                 page_counter += 1
-                
+
+                # Sempre colocar o arquivo-fonte na pasta final antes de chamar a IA.
+                # Assim a exportação fica utilizável mesmo se o provedor demorar ou falhar.
+                target = image_dir / item.filename
+                shutil.copy2(item.image_path, target)
+
                 # Decidir entre exportar como imagem traduzida ou texto estruturado (OCR/IA)
                 structured_text = ""
-                if translate_images and translator is not None and getattr(item, "export_mode", "image") == "text":
+                export_mode = getattr(item, "export_mode", "image")
+                if translate_images and translator is not None and export_mode == "text":
                     # Extrair conteúdo estruturado (tabelas e texto) usando IA.
                     # Se o provedor não retornar conteúdo, preservar a página como imagem,
                     # nunca gravar o erro da API no PDF final.
@@ -344,12 +350,14 @@ class ProjectExportService:
                 if structured_text.strip():
                     rendered_blocks.append(structured_text)
                 else:
-                    # Exportar como imagem (com ou sem tradução visual)
-                    target = image_dir / item.filename
-                    if translate_images and translator is not None:
+                    # Para o modo de imagem, sobrescrever a cópia inicial pelo resultado
+                    # visual traduzido. No fallback do modo texto, manter a imagem original.
+                    if (
+                        translate_images
+                        and translator is not None
+                        and export_mode == "image"
+                    ):
                         translator.translate_page(item.image_path, target, language)
-                    else:
-                        shutil.copy2(item.image_path, target)
                     
                     rendered_blocks.append(
                         "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "

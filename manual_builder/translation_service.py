@@ -55,7 +55,14 @@ class ManusTranslationService:
         resolved_base = endpoint or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
         self._endpoint = resolved_base.lower()
         if OpenAI is not None:
-            self._client = OpenAI(api_key=resolved_key, base_url=resolved_base)
+            # Limita cada solicitação remota para que uma falha/problema no provedor
+            # não mantenha o trabalhador de exportação bloqueado indefinidamente.
+            self._client = OpenAI(
+                api_key=resolved_key,
+                base_url=resolved_base,
+                timeout=25.0,
+                max_retries=0,
+            )
         else:
             self._client = None
 
@@ -65,17 +72,32 @@ class ManusTranslationService:
             marker in self._model.lower()
             for marker in ("qwen", "vision", "llava", "llama-4", "scout", "maverick")
         )
-        candidates: list[str] = [self._model] if configured_is_visual else []
+        candidates: list[str] = []
         if "groq.com" in self._endpoint:
-            # Modelos de visão documentados pelo GroqCloud; não use modelos OpenAI neste endpoint.
+            # Priorizar Llama 4 Scout: o modelo retorna uma resposta final direta.
+            # Qwen fica somente como alternativa, pois pode emitir blocos <think>.
             candidates.extend([
-                "qwen/qwen3.6-27b",
                 "meta-llama/llama-4-scout-17b-16e-instruct",
+                "qwen/qwen3.6-27b",
             ])
-        elif self._model not in candidates:
+            if configured_is_visual:
+                candidates.append(self._model)
+        else:
             candidates.append(self._model)
 
         return list(dict.fromkeys(candidates))
+
+    @staticmethod
+    def _clean_model_output(content: str | None) -> str:
+        """Discard hidden reasoning and return only safe user-facing model text."""
+        if not content:
+            return ""
+        cleaned = content.strip()
+        # Modelos de raciocínio podem devolver o pensamento interno em `content`.
+        # Esse material nunca pode ir para o PDF nem ser desenhado em uma imagem.
+        if "<think" in cleaned.lower() or "</think>" in cleaned.lower():
+            return ""
+        return cleaned
 
     def _vision_completion(self, prompt: str, encoded_image: str, max_tokens: int) -> str:
         """Request a vision completion, trying only models compatible with the configured provider."""
@@ -96,10 +118,11 @@ class ManusTranslationService:
                     messages=message,
                     temperature=0.1,
                     max_tokens=max_tokens,
+                    timeout=25.0,
                 )
-                content = response.choices[0].message.content
-                if content and content.strip():
-                    return content.strip()
+                content = self._clean_model_output(response.choices[0].message.content)
+                if content:
+                    return content
             except Exception:
                 # Tentar o próximo modelo de visão compatível, sem inserir o erro no manual.
                 continue
@@ -125,60 +148,18 @@ class ManusTranslationService:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
             )
-            return response.choices[0].message.content.strip() or text
+            return self._clean_model_output(response.choices[0].message.content) or text
         except Exception:
             return text
 
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
-        """Translate page image content using Manus AI multimodal capabilities and overlay translated technical labels onto the target image."""
-        if Image is None:
-            target.write_bytes(source.read_bytes())
-            return
+        """Preserve a page image without adding unreliable AI text overlays.
 
-        try:
-            if target_language == self._source_language:
-                target.write_bytes(source.read_bytes())
-                return
-
-            # Tentar extrair e traduzir o conteúdo textual visível na imagem usando a IA se o cliente estiver disponível
-            translated_content = ""
-            if self._client is not None:
-                import base64
-                with open(source, "rb") as image_file:
-                    encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-                
-                prompt = (
-                    f"Analyze this technical manual page image. Identify any key technical terms, titles, warnings, or labels visible in the image. "
-                    f"Translate them into {LANGUAGE_NAMES.get(target_language, target_language)}. "
-                    f"Provide a concise summary of the translated technical terms as a short headline (maximum 8 words)."
-                )
-                translated_content = self._vision_completion(
-                    prompt, encoded_string, max_tokens=120
-                )
-
-            if not translated_content:
-                translated_content = f"Manual Técnico - Traduzido para {LANGUAGE_NAMES.get(target_language, target_language)}"
-
-            with Image.open(source) as img:
-                draw = ImageDraw.Draw(img)
-                width, height = img.size
-                
-                # Adicionar um banner profissional de tradução no topo da imagem
-                banner_height = 55
-                draw.rectangle([0, 0, width, banner_height], fill=(30, 41, 59)) # Azul escuro profissional
-                draw.rectangle([0, banner_height - 4, width, banner_height], fill=(245, 130, 32)) # Linha laranja E2PS
-                
-                try:
-                    font = ImageFont.load_default()
-                except Exception:
-                    font = None
-                
-                header_text = f"[{target_language.upper()}] {translated_content}"
-                draw.text((15, 20), header_text, fill=(255, 255, 255), font=font)
-                
-                img.save(target, "PNG")
-        except Exception:
-            target.write_bytes(source.read_bytes())
+        Groq Vision can read an image, but it does not create a replacement image with
+        translated typography at the original positions. The reliable translated output
+        is therefore generated by ``extract_structured_content`` in Text/Table mode.
+        """
+        target.write_bytes(source.read_bytes())
 
     def extract_structured_content(self, source: Path, target_language: str) -> str:
         """Extract and translate image content as structured Markdown (text/tables) using AI Vision."""
@@ -194,17 +175,17 @@ class ManusTranslationService:
             prompt = (
                 f"Você é um especialista em tradução de manuais técnicos industriais. "
                 f"Analise esta imagem de página de manual e extraia TODO o conteúdo textual e tabelas. "
-                f"TRADUZA ABSOLUTAMENTE TUDO para {lang_name} (Português do Brasil). "
-                f"NÃO deixe NENHUM termo em espanhol, inglês ou outro idioma original — tudo deve estar perfeitamente traduzido para o português. "
+                f"TRADUZA ABSOLUTAMENTE TODO O TEXTO para {lang_name}. "
+                f"Não mantenha palavras ou frases no idioma de origem; traduza títulos, cabeçalhos, rótulos, observações e células de tabela. "
                 f"Reconstrua todas as tabelas em formato Markdown limpo (tabelas legíveis com colunas). "
                 f"Mantenha códigos, unidades (V, A, kW, Hz) e referências técnicas exatas. "
-                f"Retorne apenas o conteúdo em Markdown traduzido, sem introduções ou explicações."
+                f"Retorne apenas o conteúdo em Markdown traduzido, sem introduções, comentários, marcadores de raciocínio ou blocos <think>."
             )
             
             res_text = self._vision_completion(prompt, encoded_string, max_tokens=1800)
             # Um retorno vazio permite que o exportador preserve a imagem original em vez de
             # gravar um erro técnico no PDF final.
-            return res_text
+            return self._clean_model_output(res_text)
         except Exception:
             return ""
 
