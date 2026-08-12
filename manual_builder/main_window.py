@@ -257,25 +257,30 @@ class MainWindow(QMainWindow):
 
         right_layout.addWidget(language_group)
 
+        # Right panel now only contains AI Chat and Translation Settings
+        # Preview gets its own central dedicated wide panel
+
         self.preview = QLabel("Open a PDF to begin")
         self.preview.setObjectName("preview")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setMinimumSize(500, 600)
+        self.preview.setMinimumSize(600, 750)
         
         preview_scroll = QScrollArea()
         preview_scroll.setWidgetResizable(True)
         preview_scroll.setWidget(self.preview)
         
-        preview_group = QGroupBox("📄 Pré-visualização da Página (Amplo)")
+        preview_group = QGroupBox("📄 Pré-visualização Ampliada da Página do PDF")
         preview_layout = QVBoxLayout(preview_group)
         preview_layout.addWidget(preview_scroll)
-        right_layout.addWidget(preview_group)
 
-        splitter = QSplitter()
-        splitter.addWidget(page_panel)
-        splitter.addWidget(section_panel)
-        splitter.addWidget(right_panel_widget)
-        splitter.setSizes([230, 420, 550])
+        # 4-Column / 4-Panel Master Splitter Layout for professional workflow
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(page_panel)        # 1. Pages list
+        splitter.addWidget(preview_group)     # 2. Large central PDF preview
+        splitter.addWidget(section_panel)     # 3. Sections & mixed content editor
+        splitter.addWidget(right_panel_widget) # 4. AI Chat & Translation / Cover settings
+        
+        splitter.setSizes([200, 500, 350, 450])
         self.setCentralWidget(splitter)
 
         self.progress = QProgressBar()
@@ -345,8 +350,8 @@ class MainWindow(QMainWindow):
         if not isinstance(page, PdfPage):
             return
         pixmap = QPixmap(str(page.image_path))
-        # Exibir com resolução ampla e nítida no scroll area
-        scaled_pixmap = pixmap.scaledToWidth(700, Qt.TransformationMode.SmoothTransformation)
+        # Exibir com resolução grande e nítida (950px de largura) sem cortes no scroll area
+        scaled_pixmap = pixmap.scaledToWidth(950, Qt.TransformationMode.SmoothTransformation)
         self.preview.setPixmap(scaled_pixmap)
         self.preview.resize(scaled_pixmap.size())
 
