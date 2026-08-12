@@ -258,7 +258,7 @@ class MainWindow(QMainWindow):
     def _show_current_page(self, item: QListWidgetItem | None) -> None:
         if item is None:
             return
-        page = item.data(0, Qt.ItemDataRole.UserRole)
+        page = item.data(Qt.ItemDataRole.UserRole)
         if not isinstance(page, PdfPage):
             return
         pixmap = QPixmap(str(page.image_path))
@@ -379,7 +379,7 @@ class MainWindow(QMainWindow):
         if item is None:
             QMessageBox.warning(self, "Select a page", "Choose a page to crop first.")
             return
-        page = item.data(0, Qt.ItemDataRole.UserRole)
+        page = item.data(Qt.ItemDataRole.UserRole)
         if not isinstance(page, PdfPage):
             return
         source = QPixmap(str(page.image_path))

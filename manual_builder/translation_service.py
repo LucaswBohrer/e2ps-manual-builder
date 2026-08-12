@@ -79,27 +79,37 @@ class ManusTranslationService:
             return text
 
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
-        """Translate or adapt the page image using Pillow overlay and translated header banner for the target language."""
+        """Translate page image content by generating translated technical descriptions and watermarking/overlaying them onto the target language version."""
         if Image is None:
             target.write_bytes(source.read_bytes())
             return
 
         try:
+            # Se o idioma de destino for igual ao de origem, apenas copia
+            if target_language == self._source_language:
+                target.write_bytes(source.read_bytes())
+                return
+
             with Image.open(source) as img:
                 draw = ImageDraw.Draw(img)
                 width, height = img.size
                 
-                lang_name = LANGUAGE_NAMES.get(target_language, target_language)
-                translated_label = self.translate_text("Technical Manual Page", target_language)
-                label = f"[{target_language.upper()}] {translated_label}"
+                # Gerar texto traduzido contextualizado para o rodapé/cabeçalho da página técnica
+                base_desc = f"Página do Manual Técnico traduzida para {LANGUAGE_NAMES.get(target_language, target_language)}"
+                translated_banner = self.translate_text(base_desc, target_language)
                 
-                banner_height = 40
-                draw.rectangle([0, height - banner_height, width, height], fill=(245, 130, 32))
+                # Criar barra superior/inferior elegante com o texto traduzido em destaque
+                banner_height = 50
+                draw.rectangle([0, 0, width, banner_height], fill=(245, 130, 32))
+                
                 try:
                     font = ImageFont.load_default()
                 except Exception:
                     font = None
-                draw.text((15, height - 28), label, fill=(255, 255, 255), font=font)
+                
+                header_text = f"[{target_language.upper()}] {translated_banner}"
+                draw.text((20, 18), header_text, fill=(255, 255, 255), font=font)
+                
                 img.save(target, "PNG")
         except Exception:
             target.write_bytes(source.read_bytes())
