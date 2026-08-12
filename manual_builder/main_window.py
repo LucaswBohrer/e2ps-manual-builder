@@ -182,20 +182,25 @@ class MainWindow(QMainWindow):
         ai_chat_group = QGroupBox("🤖 Manus AI Assistant & Chat")
         ai_chat_layout = QVBoxLayout(ai_chat_group)
         
-        # API Key & Base URL input for free providers (Groq, Together, etc.)
+        # API Key, Base URL & Model input for free providers (Groq, etc.)
         api_key_layout = QHBoxLayout()
         self.api_key_input = QLineEdit()
-        self.api_key_input.setPlaceholderText("Cole sua API Key gratuita (ex: Groq, OpenAI)...")
+        self.api_key_input.setPlaceholderText("API Key (ex: gsk_...)")
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_key_input.textChanged.connect(self._on_api_key_changed)
         
         self.base_url_input = QLineEdit()
         self.base_url_input.setPlaceholderText("Base URL (ex: https://api.groq.com/openai/v1)")
+        
+        self.model_input = QLineEdit("llama-3.3-70b-versatile")
+        self.model_input.setPlaceholderText("Model (ex: llama-3.3-70b-versatile)")
         
         save_key_button = QPushButton("Salvar Configs")
         save_key_button.clicked.connect(self._save_api_key)
         
         api_key_layout.addWidget(self.api_key_input)
         api_key_layout.addWidget(self.base_url_input)
+        api_key_layout.addWidget(self.model_input)
         api_key_layout.addWidget(save_key_button)
         ai_chat_layout.addLayout(api_key_layout)
 
@@ -609,12 +614,21 @@ class MainWindow(QMainWindow):
         reply = self._ai_service.ask_ai(msg, summary)
         self.chat_display.append(f"<br><b>🤖 Manus AI:</b> {reply}")
 
+    def _on_api_key_changed(self, text: str) -> None:
+        """Auto-fill Groq default URL and model if a Groq key (gsk_) is pasted."""
+        if text.strip().startswith("gsk_"):
+            if not self.base_url_input.text().strip():
+                self.base_url_input.setText("https://api.groq.com/openai/v1")
+            if not self.model_input.text().strip():
+                self.model_input.setText("llama-3.3-70b-versatile")
+
     def _save_api_key(self) -> None:
-        """Save user provided API key and base URL into AI service."""
+        """Save user provided API key, base URL and model into AI service."""
         key = self.api_key_input.text().strip()
         base_url = self.base_url_input.text().strip()
-        self._ai_service.update_key(key, base_url)
-        QMessageBox.information(self, "Configurações Salvas", "Chave de API e URL base atualizadas com sucesso no assistente de IA.")
+        model = self.model_input.text().strip()
+        self._ai_service.update_key(key, base_url, model)
+        QMessageBox.information(self, "Configurações Salvas", f"Configurações salvas!\nModelo: {model or 'gpt-4o-mini'}\nBase URL: {base_url or 'OpenAI Default'}")
         self.statusBar().showMessage("Configurações de IA atualizadas.")
 
     def _browse_cover_image(self) -> None:
