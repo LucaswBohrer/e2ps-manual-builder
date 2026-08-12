@@ -350,8 +350,8 @@ class MainWindow(QMainWindow):
         if not isinstance(page, PdfPage):
             return
         pixmap = QPixmap(str(page.image_path))
-        # Exibir com resolução grande e nítida (950px de largura) sem cortes no scroll area
-        scaled_pixmap = pixmap.scaledToWidth(950, Qt.TransformationMode.SmoothTransformation)
+        # Exibir com resolução otimizada (650px de largura) para caber melhor na tela sem excesso de rolagem
+        scaled_pixmap = pixmap.scaledToWidth(650, Qt.TransformationMode.SmoothTransformation)
         self.preview.setPixmap(scaled_pixmap)
         self.preview.resize(scaled_pixmap.size())
 

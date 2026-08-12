@@ -1,9 +1,13 @@
-# Relatório Final - Correção de Inicialização (E2PS Manual Builder)
+# Relatório Final - Redesenho do Layout de Pré-visualização (E2PS Manual Builder)
 
-O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para corrigir o erro que impedia a aplicação de abrir (fechando logo após iniciar):
+O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para resolver o problema da pré-visualização pequena e cortada:
 
-1. **Correção de Import Ausente**:
-   - O componente `QScrollArea`, adicionado para melhorar a visualização da pré-visualização das páginas, não estava importado do PySide6 na classe `MainWindow`, causando um encerramento imediato (crash) ao iniciar. O import foi adicionado com sucesso.
+1. **Novo Layout em 4 Colunas / Painéis Independentes**:
+   - A interface principal foi totalmente reorganizada em um `QSplitter` horizontal de 4 partes:
+     - **Coluna 1**: Lista de páginas do PDF.
+     - **Coluna 2 (Destaque Central)**: **Painel de Pré-visualização Ampliada** (`950px` de largura base, com rolagem suave em `QScrollArea`), garantindo que qualquer página seja visualizada inteira, sem cortes e com total nitidez.
+     - **Coluna 3**: Editor de Estrutura do Manual (Seções, Subseções e Inserção de Blocos de Texto).
+     - **Coluna 4**: Assistente de IA, Chat Interativo e Configurações de Tradução / Capa.
 
 2. **Sincronização com o GitHub**:
-   - A correção foi validada por compilação estática (`py_compile`) e enviada (*commit and push*) para o repositório oficial no GitHub.
+   - Todas as modificações foram compiladas, testadas com sucesso e enviadas (*commit and push*) para o repositório oficial no GitHub.
