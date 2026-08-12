@@ -1,11 +1,14 @@
-# Relatório Final - Correção dos Botões de Seção (E2PS Manual Builder)
+# Relatório Final - Upload Direto de Imagens (E2PS Manual Builder)
 
-O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para corrigir o bloqueio nos botões de gerenciamento de seções:
+O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado com sucesso para permitir a importação direta de imagens:
 
-1. **Correção de Habilitação do Botão de Seção**:
-   - Diagnosticou-se que o botão `Create Section (Checked Pages)` (`add_section_button`) iniciava desabilitado e nunca era reativado após a renderização das páginas do PDF.
-   - Adicionou-se a ativação automática (`self.add_section_button.setEnabled(True)`) no método de conclusão de renderização do PDF (`_rendering_completed`).
-   - Com isso, todas as demais operações (subseções, renomeação, remoção e inserção de blocos de texto) voltam a funcionar perfeitamente ao selecionar ou criar itens.
+1. **Funcionalidade "Open Images"**:
+   - Adicionada a opção **"Open Images"** na barra de ferramentas superior da aplicação.
+   - Permite selecionar múltiplos arquivos de imagem (`.png`, `.jpg`, `.jpeg`, `.bmp`, `.webp`) diretamente do computador.
+   - O programa processa automaticamente as imagens, gerando miniaturas e preparando-as na lista lateral exatamente como se fossem páginas renderizadas de um PDF.
 
-2. **Sincronização com o GitHub**:
-   - A correção foi testada por compilação estática e enviada (*commit and push*) com sucesso para o repositório oficial no GitHub.
+2. **Montagem Completa do Manual**:
+   - Uma vez carregadas as imagens, você pode selecioná-las, criar seções e subseções, recortá-las (*crop*), inserir blocos de texto personalizados entre elas e gerar o projeto R Markdown completo para compilação em PDF.
+
+3. **Sincronização com o GitHub**:
+   - As alterações foram testadas por compilação estática e enviadas (*commit and push*) com sucesso para o repositório oficial no GitHub.

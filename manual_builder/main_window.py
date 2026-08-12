@@ -6,7 +6,10 @@ from datetime import date
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QAction, QIcon, QPixmap
@@ -352,6 +355,8 @@ class MainWindow(QMainWindow):
             dest_thumb_path = temp_dir / f"thumbnail_{i:03d}_{variant:02d}.png"
             
             try:
+                if Image is None:
+                    raise ImportError("Pillow (PIL) não está instalado no ambiente Python.")
                 img = Image.open(src_path)
                 if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
