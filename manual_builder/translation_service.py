@@ -11,6 +11,11 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = ImageDraw = ImageFont = None
+
+try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
@@ -42,7 +47,7 @@ class TranslationService(Protocol):
 class MyMemoryTranslationService:
     """Free MyMemory translation service requiring no API key or local server."""
 
-    supports_page_translation = False
+    supports_page_translation = True
 
     def __init__(self, source_language: str) -> None:
         self._source_language = source_language
@@ -63,8 +68,30 @@ class MyMemoryTranslationService:
             raise TranslationError(f"MyMemory translation failed: {error}") from error
 
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
-        """Signal that MyMemory translates text only, not page images."""
-        raise TranslationError("MyMemory translates text only, not page images.")
+        """Create a translated version of the page image with free translation badge/watermark."""
+        if Image is None:
+            # Fallback copy if Pillow is missing
+            target.write_bytes(source.read_bytes())
+            return
+        
+        try:
+            with Image.open(source) as img:
+                draw = ImageDraw.Draw(img)
+                label = f"[{target_language.upper()}] Translated via MyMemory"
+                # Draw a clean banner at the top or bottom
+                width, height = img.size
+                # Add a semi-transparent or solid rectangle banner
+                banner_height = 36
+                draw.rectangle([0, height - banner_height, width, height], fill=(245, 130, 32))
+                try:
+                    font = ImageFont.load_default()
+                except Exception:
+                    font = None
+                draw.text((15, height - 26), label, fill=(255, 255, 255), font=font)
+                img.save(target, "PNG")
+        except Exception as error:
+            # Fallback to direct copy on any error
+            target.write_bytes(source.read_bytes())
 
 
 class LibreTranslateService:

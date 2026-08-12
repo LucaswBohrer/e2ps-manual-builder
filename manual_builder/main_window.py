@@ -296,13 +296,13 @@ class MainWindow(QMainWindow):
                 "Enter the URL of a LibreTranslate-compatible endpoint.",
             )
             return
-        if provider in ("mymemory", "libretranslate") and needs_translation:
+        if provider == "libretranslate" and needs_translation:
             QMessageBox.information(
                 self,
                 "Free translation limitation",
-                "Free translation (MyMemory/LibreTranslate) translates the manual title and section names. "
+                "LibreTranslate translates the manual title and section names. "
                 "It does not redraw text inside page images; those PNGs are copied "
-                "unchanged. Use OpenAI only when translated page images are required.",
+                "unchanged.",
             )
         destination = QFileDialog.getExistingDirectory(self, "Choose project location")
         if not destination:
@@ -437,12 +437,13 @@ class MainWindow(QMainWindow):
         for index, section in enumerate(self._sections, start=1):
             page_labels = ", ".join(page.display_name for page in section.pages)
             parent = QTreeWidgetItem([f"{index}. {section.title} ({page_labels})"])
-            parent.setData(Qt.ItemDataRole.UserRole, ("section", index - 1, -1))
+            parent.setData(0, Qt.ItemDataRole.UserRole, ("section", index - 1, -1))
             self.section_tree.addTopLevelItem(parent)
             for sub_index, subsection in enumerate(section.subsections, start=1):
                 sub_pages = ", ".join(page.display_name for page in subsection.pages)
                 child = QTreeWidgetItem([f"{sub_index}. {subsection.title} ({sub_pages})"])
                 child.setData(
+                    0,
                     Qt.ItemDataRole.UserRole,
                     ("subsection", index - 1, sub_index - 1),
                 )
