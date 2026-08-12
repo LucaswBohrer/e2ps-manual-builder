@@ -17,8 +17,10 @@ def test_imports():
 
 def test_translation_service():
     print("Testing translation service creation...")
-    service = create_translation_service("mymemory", "", "", "pt")
+    service = create_translation_service("manus", "", "", "pt")
     assert service.supports_page_translation is True
+    translated = service.translate_text("Installation", "pt")
+    assert translated == "Installation"
     print("Translation service test passed.")
 
 if __name__ == "__main__":

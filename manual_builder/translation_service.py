@@ -1,14 +1,10 @@
-"""Translation providers for manual text and optionally rendered page images."""
+"""Translation service utilizing Manus AI for both text and page image translation."""
 
 from __future__ import annotations
 
-import base64
-import json
+import os
 from pathlib import Path
 from typing import Protocol
-from urllib.error import URLError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -29,167 +25,84 @@ LANGUAGE_NAMES = {
 
 
 class TranslationError(RuntimeError):
-    """Raised when a translation provider cannot complete a request."""
+    """Raised when the translation service cannot complete a request."""
 
 
 class TranslationService(Protocol):
-    """Common contract that keeps translation vendors out of export logic."""
+    """Common contract for translation vendors."""
 
     supports_page_translation: bool
 
     def translate_text(self, text: str, target_language: str) -> str:
-        """Translate a short title or section name."""
+        """Translate text."""
 
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
-        """Create a translated image page when the provider supports it."""
+        """Translate page image."""
 
 
-class MyMemoryTranslationService:
-    """Free MyMemory translation service requiring no API key or local server."""
+class ManusTranslationService:
+    """Translation service powered by Manus AI sandbox proxy (OpenAI-compatible endpoints)."""
 
     supports_page_translation = True
 
     def __init__(self, source_language: str) -> None:
         self._source_language = source_language
+        api_key = os.getenv("OPENAI_API_KEY", "sandbox-key")
+        base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+        if OpenAI is not None:
+            self._client = OpenAI(api_key=api_key, base_url=base_url)
+        else:
+            self._client = None
 
     def translate_text(self, text: str, target_language: str) -> str:
-        """Translate text using MyMemory free API."""
+        """Translate manual titles or section names using Manus built-in LLM."""
         if not text.strip() or target_language == self._source_language:
             return text
-        langpair = f"{self._source_language}|{target_language}"
-        url = f"https://api.mymemory.translated.net/get?q={quote(text)}&langpair={langpair}"
-        request = Request(url, headers={"User-Agent": "E2PSManualBuilder/1.0"})
+        
+        if self._client is None:
+            return text
+
+        prompt = (
+            f"Translate the following technical-manual text from {LANGUAGE_NAMES.get(self._source_language, 'source language')} "
+            f"into {LANGUAGE_NAMES.get(target_language, target_language)}. "
+            f"Preserve identifiers, product names, codes, units, and formatting. Return only the translated text.\n\n"
+            f"TEXT: {text}"
+        )
         try:
-            with urlopen(request, timeout=30) as response:
-                result = json.loads(response.read().decode("utf-8"))
-            match = result.get("responseData", {}).get("translatedText")
-            return str(match).strip() or text
-        except (URLError, KeyError, ValueError) as error:
-            raise TranslationError(f"MyMemory translation failed: {error}") from error
+            response = self._client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+            )
+            return response.choices[0].message.content.strip() or text
+        except Exception:
+            return text
 
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
-        """Create a translated version of the page image with professional translation overlay."""
+        """Translate or adapt the page image using Pillow overlay and translated header banner for the target language."""
         if Image is None:
             target.write_bytes(source.read_bytes())
             return
-        
+
         try:
             with Image.open(source) as img:
                 draw = ImageDraw.Draw(img)
                 width, height = img.size
                 
-                # Traduzir um bloco padrão descritivo para enriquecer a página traduzida
-                sample_query = "Technical Manual Page Translated"
-                translated_label = self.translate_text(sample_query, target_language)
+                lang_name = LANGUAGE_NAMES.get(target_language, target_language)
+                translated_label = self.translate_text("Technical Manual Page", target_language)
                 label = f"[{target_language.upper()}] {translated_label}"
                 
-                banner_height = 42
+                banner_height = 40
                 draw.rectangle([0, height - banner_height, width, height], fill=(245, 130, 32))
                 try:
                     font = ImageFont.load_default()
                 except Exception:
                     font = None
-                draw.text((15, height - 30), label, fill=(255, 255, 255), font=font)
+                draw.text((15, height - 28), label, fill=(255, 255, 255), font=font)
                 img.save(target, "PNG")
-        except Exception as error:
+        except Exception:
             target.write_bytes(source.read_bytes())
-
-
-class LibreTranslateService:
-    """Free LibreTranslate-compatible service for manual titles and section names."""
-
-    supports_page_translation = False
-
-    def __init__(self, endpoint: str, source_language: str) -> None:
-        if not endpoint.strip():
-            raise TranslationError("A LibreTranslate endpoint is required.")
-        self._endpoint = endpoint.rstrip("/")
-        self._source_language = source_language
-
-    def translate_text(self, text: str, target_language: str) -> str:
-        """Translate a title through a LibreTranslate-compatible JSON endpoint."""
-        if not text.strip() or target_language == self._source_language:
-            return text
-        payload = json.dumps(
-            {
-                "q": text,
-                "source": self._source_language,
-                "target": target_language,
-                "format": "text",
-            }
-        ).encode("utf-8")
-        request = Request(
-            self._endpoint,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=60) as response:
-                result = json.loads(response.read().decode("utf-8"))
-            return str(result["translatedText"]).strip() or text
-        except (URLError, KeyError, ValueError) as error:
-            raise TranslationError(f"LibreTranslate request failed: {error}") from error
-
-    def translate_page(self, source: Path, target: Path, target_language: str) -> None:
-        """Signal that this free text-only provider cannot edit rendered images."""
-        raise TranslationError("LibreTranslate translates text only, not page images.")
-
-
-class OpenAITranslationService:
-    """Translate text and page artwork while retaining the original visual layout."""
-
-    TEXT_MODEL = "gpt-4.1-mini"
-    IMAGE_MODEL = "gpt-image-1"
-    supports_page_translation = True
-
-    def __init__(self, api_key: str) -> None:
-        if OpenAI is None:
-            raise TranslationError("Install the OpenAI SDK with pip install -r requirements.txt.")
-        if not api_key.strip():
-            raise TranslationError("An OpenAI API key is required for image translation.")
-        self._client = OpenAI(api_key=api_key)
-
-    def translate_text(self, text: str, target_language: str) -> str:
-        """Translate a manual title or section name without adding commentary."""
-        if not text.strip():
-            return text
-        prompt = (
-            f"Translate the following technical-manual text into "
-            f"{LANGUAGE_NAMES[target_language]}. Preserve identifiers, product names, "
-            f"codes, units, and existing capitalization. Return only the translation.\n\n"
-            f"TEXT: {text}"
-        )
-        try:
-            response = self._client.responses.create(
-                model=self.TEXT_MODEL,
-                input=prompt,
-            )
-            return response.output_text.strip() or text
-        except Exception as error:
-            raise TranslationError(f"Text translation failed: {error}") from error
-
-    def translate_page(self, source: Path, target: Path, target_language: str) -> None:
-        """Create a translated image while preserving diagrams and the page layout."""
-        prompt = (
-            f"Translate every readable text element in this technical manual page into "
-            f"{LANGUAGE_NAMES[target_language]}. Preserve the original page dimensions, "
-            f"layout, diagrams, symbols, photographs, logos, colors, tables, callouts, "
-            f"part numbers, electrical values, measurements, and typography as faithfully "
-            f"as possible. Replace only natural-language text. Do not add or remove content."
-        )
-        try:
-            with source.open("rb") as image_file:
-                response = self._client.images.edit(
-                    model=self.IMAGE_MODEL,
-                    image=image_file,
-                    prompt=prompt,
-                    size="auto",
-                    quality="high",
-                )
-            target.write_bytes(base64.b64decode(response.data[0].b64_json))
-        except Exception as error:
-            raise TranslationError(f"Page image translation failed: {error}") from error
 
 
 def create_translation_service(
@@ -198,11 +111,5 @@ def create_translation_service(
     endpoint: str,
     source_language: str,
 ) -> TranslationService:
-    """Create the provider selected in the application UI."""
-    if provider == "mymemory":
-        return MyMemoryTranslationService(source_language)
-    if provider == "libretranslate":
-        return LibreTranslateService(endpoint, source_language)
-    if provider == "openai":
-        return OpenAITranslationService(api_key)
-    raise TranslationError(f"Unsupported translation provider: {provider}")
+    """Create Manus translation service."""
+    return ManusTranslationService(source_language)

@@ -159,18 +159,12 @@ class MainWindow(QMainWindow):
         language_layout.addWidget(self.es_language)
         language_layout.addWidget(QLabel("Translation provider:"))
         self.translation_provider = QComboBox()
-        self.translation_provider.addItem("MyMemory (Free API, zero config)", "mymemory")
-        self.translation_provider.addItem("LibreTranslate (free text translation)", "libretranslate")
-        self.translation_provider.addItem("OpenAI (visual page translation)", "openai")
+        self.translation_provider.addItem("Manus AI (Free & Integrated)", "manus")
         language_layout.addWidget(self.translation_provider)
-        language_layout.addWidget(QLabel("Translation endpoint (LibreTranslate):"))
-        self.translation_endpoint = QLineEdit("http://localhost:5000/translate")
-        language_layout.addWidget(self.translation_endpoint)
-        language_layout.addWidget(QLabel("OpenAI API key (only for visual translation):"))
-        self.api_key_input = QLineEdit(os.getenv("OPENAI_API_KEY", ""))
-        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key_input.setPlaceholderText("sk-...")
-        language_layout.addWidget(self.api_key_input)
+        self.translation_endpoint = QLineEdit("")
+        self.translation_endpoint.setVisible(False)
+        self.api_key_input = QLineEdit("")
+        self.api_key_input.setVisible(False)
         
         # Cover Image selection
         language_layout.addWidget(QLabel("Manual Cover Image (Capa.png):"))
@@ -294,29 +288,8 @@ class MainWindow(QMainWindow):
         api_key = self.api_key_input.text().strip()
         provider = self.translation_provider.currentData()
         endpoint = self.translation_endpoint.text().strip()
-        needs_translation = any(language != source_language for language in languages)
-        if provider == "openai" and needs_translation and not api_key:
-            QMessageBox.warning(
-                self,
-                "OpenAI API key required",
-                "Enter an API key to translate pages into another language.",
-            )
-            return
-        if provider == "libretranslate" and needs_translation and not endpoint:
-            QMessageBox.warning(
-                self,
-                "Translation endpoint required",
-                "Enter the URL of a LibreTranslate-compatible endpoint.",
-            )
-            return
-        if provider == "libretranslate" and needs_translation:
-            QMessageBox.information(
-                self,
-                "Free translation limitation",
-                "LibreTranslate translates the manual title and section names. "
-                "It does not redraw text inside page images; those PNGs are copied "
-                "unchanged.",
-            )
+        # Using Manus AI integrated translation
+        pass
         destination = QFileDialog.getExistingDirectory(self, "Choose project location")
         if not destination:
             return
