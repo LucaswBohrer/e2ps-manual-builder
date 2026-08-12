@@ -1,9 +1,10 @@
-"""Background workers used to keep PDF rendering responsive."""
+"""Background worker threads for non-blocking UI rendering and export."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import fitz
 from PySide6.QtCore import QThread, Signal
 
 from manual_builder.models import PdfPage

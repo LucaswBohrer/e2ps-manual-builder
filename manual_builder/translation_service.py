@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Protocol
 from urllib.error import URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 try:
@@ -36,6 +37,34 @@ class TranslationService(Protocol):
 
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
         """Create a translated image page when the provider supports it."""
+
+
+class MyMemoryTranslationService:
+    """Free MyMemory translation service requiring no API key or local server."""
+
+    supports_page_translation = False
+
+    def __init__(self, source_language: str) -> None:
+        self._source_language = source_language
+
+    def translate_text(self, text: str, target_language: str) -> str:
+        """Translate text using MyMemory free API."""
+        if not text.strip() or target_language == self._source_language:
+            return text
+        langpair = f"{self._source_language}|{target_language}"
+        url = f"https://api.mymemory.translated.net/get?q={quote(text)}&langpair={langpair}"
+        request = Request(url, headers={"User-Agent": "E2PSManualBuilder/1.0"})
+        try:
+            with urlopen(request, timeout=30) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            match = result.get("responseData", {}).get("translatedText")
+            return str(match).strip() or text
+        except (URLError, KeyError, ValueError) as error:
+            raise TranslationError(f"MyMemory translation failed: {error}") from error
+
+    def translate_page(self, source: Path, target: Path, target_language: str) -> None:
+        """Signal that MyMemory translates text only, not page images."""
+        raise TranslationError("MyMemory translates text only, not page images.")
 
 
 class LibreTranslateService:
@@ -142,6 +171,8 @@ def create_translation_service(
     source_language: str,
 ) -> TranslationService:
     """Create the provider selected in the application UI."""
+    if provider == "mymemory":
+        return MyMemoryTranslationService(source_language)
     if provider == "libretranslate":
         return LibreTranslateService(endpoint, source_language)
     if provider == "openai":

@@ -159,6 +159,7 @@ class MainWindow(QMainWindow):
         language_layout.addWidget(self.es_language)
         language_layout.addWidget(QLabel("Translation provider:"))
         self.translation_provider = QComboBox()
+        self.translation_provider.addItem("MyMemory (Free API, zero config)", "mymemory")
         self.translation_provider.addItem("LibreTranslate (free text translation)", "libretranslate")
         self.translation_provider.addItem("OpenAI (visual page translation)", "openai")
         language_layout.addWidget(self.translation_provider)
@@ -295,11 +296,11 @@ class MainWindow(QMainWindow):
                 "Enter the URL of a LibreTranslate-compatible endpoint.",
             )
             return
-        if provider == "libretranslate" and needs_translation:
+        if provider in ("mymemory", "libretranslate") and needs_translation:
             QMessageBox.information(
                 self,
                 "Free translation limitation",
-                "LibreTranslate translates the manual title and section names. "
+                "Free translation (MyMemory/LibreTranslate) translates the manual title and section names. "
                 "It does not redraw text inside page images; those PNGs are copied "
                 "unchanged. Use OpenAI only when translated page images are required.",
             )
