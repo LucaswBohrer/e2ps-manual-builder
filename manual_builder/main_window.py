@@ -249,7 +249,6 @@ class MainWindow(QMainWindow):
 
         self._render_worker = PdfRenderWorker(Path(file_path), Path(self._temp_dir.name))
         self._render_worker.progress_changed.connect(self._update_render_progress)
-        self._render_worker.page_rendered.connect(self._page_rendered)
         self._render_worker.completed.connect(self._rendering_completed)
         self._render_worker.failed.connect(self._rendering_failed)
 
@@ -259,25 +258,27 @@ class MainWindow(QMainWindow):
         self._render_worker.start()
         self.statusBar().showMessage("Rendering PDF pages...")
 
-    def _update_render_progress(self, percent: int) -> None:
-        self.progress.setValue(percent)
+    def _update_render_progress(self, current: int, total: int) -> None:
+        if total > 0:
+            self.progress.setValue(int((current / total) * 100))
 
-    def _page_rendered(self, page: PdfPage) -> None:
-        self._pages.append(page)
-        item = QListWidgetItem(page.display_name)
-        item.setData(Qt.ItemDataRole.UserRole, page)
-        item.setCheckState(Qt.CheckState.Unchecked)
-        item.setIcon(QIcon(str(page.thumbnail_path)))
-        item.setSizeHint(QSize(0, 42))
-        self.page_list.addItem(item)
+    def _rendering_completed(self, pages: list[PdfPage]) -> None:
+        self._pages = pages
+        self.page_list.clear()
+        for page in pages:
+            item = QListWidgetItem(page.display_name)
+            item.setData(Qt.ItemDataRole.UserRole, page)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            item.setIcon(QIcon(str(page.thumbnail_path)))
+            item.setSizeHint(QSize(0, 42))
+            self.page_list.addItem(item)
 
-    def _rendering_completed(self, total: int) -> None:
         self.progress.setVisible(False)
         self.select_all_button.setEnabled(True)
         self.clear_selection_button.setEnabled(True)
         self.crop_page_button.setEnabled(True)
         self.ai_suggest_button.setEnabled(bool(self._pages))
-        self.statusBar().showMessage(f"Successfully rendered {total} pages")
+        self.statusBar().showMessage(f"Successfully rendered {len(pages)} pages")
 
     def _rendering_failed(self, error: str) -> None:
         self.progress.setVisible(False)
