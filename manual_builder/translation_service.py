@@ -53,10 +53,57 @@ class ManusTranslationService:
         self._model = model or "llama-3.3-70b-versatile"
         resolved_key = api_key or os.getenv("OPENAI_API_KEY", "sandbox-key")
         resolved_base = endpoint or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+        self._endpoint = resolved_base.lower()
         if OpenAI is not None:
             self._client = OpenAI(api_key=resolved_key, base_url=resolved_base)
         else:
             self._client = None
+
+    def _vision_model_candidates(self) -> list[str]:
+        """Return compatible vision models, prioritizing native Groq options."""
+        configured_is_visual = any(
+            marker in self._model.lower()
+            for marker in ("qwen", "vision", "llava", "llama-4", "scout", "maverick")
+        )
+        candidates: list[str] = [self._model] if configured_is_visual else []
+        if "groq.com" in self._endpoint:
+            # Modelos de visão documentados pelo GroqCloud; não use modelos OpenAI neste endpoint.
+            candidates.extend([
+                "qwen/qwen3.6-27b",
+                "meta-llama/llama-4-scout-17b-16e-instruct",
+            ])
+        elif self._model not in candidates:
+            candidates.append(self._model)
+
+        return list(dict.fromkeys(candidates))
+
+    def _vision_completion(self, prompt: str, encoded_image: str, max_tokens: int) -> str:
+        """Request a vision completion, trying only models compatible with the configured provider."""
+        if self._client is None:
+            return ""
+
+        message = [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{encoded_image}"}},
+            ],
+        }]
+        for vision_model in self._vision_model_candidates():
+            try:
+                response = self._client.chat.completions.create(
+                    model=vision_model,
+                    messages=message,
+                    temperature=0.1,
+                    max_tokens=max_tokens,
+                )
+                content = response.choices[0].message.content
+                if content and content.strip():
+                    return content.strip()
+            except Exception:
+                # Tentar o próximo modelo de visão compatível, sem inserir o erro no manual.
+                continue
+        return ""
 
     def translate_text(self, text: str, target_language: str) -> str:
         """Translate manual titles or section names using Manus built-in LLM."""
@@ -105,31 +152,9 @@ class ManusTranslationService:
                     f"Translate them into {LANGUAGE_NAMES.get(target_language, target_language)}. "
                     f"Provide a concise summary of the translated technical terms as a short headline (maximum 8 words)."
                 )
-                try:
-                    # Usar o modelo configurado (Groq) se suportar visão, caso contrário gpt-4o-mini
-                    vision_model = self._model if "llama" not in self._model.lower() else "gpt-4o-mini"
-                    response = self._client.chat.completions.create(
-                        model=vision_model,
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": prompt},
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": f"data:image/png;base64,{encoded_string}"
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        max_tokens=100,
-                        temperature=0.1,
-                    )
-                    translated_content = response.choices[0].message.content.strip()
-                except Exception:
-                    translated_content = ""
+                translated_content = self._vision_completion(
+                    prompt, encoded_string, max_tokens=120
+                )
 
             if not translated_content:
                 translated_content = f"Manual Técnico - Traduzido para {LANGUAGE_NAMES.get(target_language, target_language)}"
@@ -176,34 +201,12 @@ class ManusTranslationService:
                 f"Retorne apenas o conteúdo em Markdown traduzido, sem introduções ou explicações."
             )
             
-            # Se o usuário estiver usando Groq (que atualmente não aceita image_url diretamente), fazemos fallback robusto para gpt-4o-mini ou simulamos OCR via texto
-            active_model = self._model
-            if "llama" in active_model.lower():
-                active_model = "gpt-4o-mini" # Garante suporte multimodal confiável para extração visual
-
-            response = self._client.chat.completions.create(
-                model=active_model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{encoded_string}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                temperature=0.0,
-                max_tokens=1500,
-            )
-            res_text = response.choices[0].message.content.strip()
-            return res_text if res_text else f"*(Conteúdo da página {source.stem} traduzido para {lang_name})*"
-        except Exception as e:
-            return f"Erro ao extrair conteúdo da imagem: {str(e)}"
+            res_text = self._vision_completion(prompt, encoded_string, max_tokens=1800)
+            # Um retorno vazio permite que o exportador preserve a imagem original em vez de
+            # gravar um erro técnico no PDF final.
+            return res_text
+        except Exception:
+            return ""
 
 
 def create_translation_service(

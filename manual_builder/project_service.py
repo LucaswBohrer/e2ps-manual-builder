@@ -34,7 +34,7 @@ header-includes:
   - \fancyhead[LO,RE]{{\fontsize{{8}}{{10}}\selectfont Technical Documentation by E2PS}}
   - \fancyhead[RO,LE]{{\includegraphics[width = 0.13\textwidth]{{LogoHeader.png}}}}
   - \fancyfoot{{}}
-  - \renewcommand{{\headrulewidth}}{{0.5pt}}
+  - \renewcommand{{\headrulewidth}}{{0pt}}
   - \renewcommand{{\footrulewidth}}{{0pt}}
   - \hoffset 0cm
   - \voffset -0.7cm
@@ -334,9 +334,14 @@ class ProjectExportService:
                 page_counter += 1
                 
                 # Decidir entre exportar como imagem traduzida ou texto estruturado (OCR/IA)
+                structured_text = ""
                 if translate_images and translator is not None and getattr(item, "export_mode", "image") == "text":
-                    # Extrair conteúdo estruturado (tabelas e texto) usando IA
+                    # Extrair conteúdo estruturado (tabelas e texto) usando IA.
+                    # Se o provedor não retornar conteúdo, preservar a página como imagem,
+                    # nunca gravar o erro da API no PDF final.
                     structured_text = translator.extract_structured_content(item.image_path, language)
+
+                if structured_text.strip():
                     rendered_blocks.append(structured_text)
                 else:
                     # Exportar como imagem (com ou sem tradução visual)
