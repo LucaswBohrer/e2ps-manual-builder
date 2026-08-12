@@ -198,10 +198,14 @@ class MainWindow(QMainWindow):
         save_key_button = QPushButton("Salvar Configs")
         save_key_button.clicked.connect(self._save_api_key)
         
+        test_conn_button = QPushButton("Testar Conexão")
+        test_conn_button.clicked.connect(self._test_ai_connection)
+        
         api_key_layout.addWidget(self.api_key_input)
         api_key_layout.addWidget(self.base_url_input)
         api_key_layout.addWidget(self.model_input)
         api_key_layout.addWidget(save_key_button)
+        api_key_layout.addWidget(test_conn_button)
         ai_chat_layout.addLayout(api_key_layout)
 
         self.chat_display = QTextEdit()
@@ -577,14 +581,17 @@ class MainWindow(QMainWindow):
         if not self._pages:
             QMessageBox.warning(self, "No pages", "Open a PDF first.")
             return
-        summary = ", ".join(f"Pág {p.number}" for p in self._pages)
-        suggestion = self._ai_suggest_service_call(summary)
+        suggestion = self._ai_service.suggest_structure_text(self._pages, self.title_input.text())
         self.chat_display.append(f"\n<b>🤖 [Sugestão de Estrutura da IA]:</b><br>{suggestion}<br>")
         self.statusBar().showMessage("IA gerou sugestão de estrutura no painel de chat.")
 
-    def ai_suggest_service_call(self, summary: str) -> str:
-        """Call AI service for structure suggestion."""
-        return self._ai_service.suggest_structure_text(self._pages, self.title_input.text())
+    def _test_ai_connection(self) -> None:
+        """Test API connection with current settings."""
+        success, message = self._ai_service.test_connection()
+        if success:
+            QMessageBox.information(self, "Sucesso", message)
+        else:
+            QMessageBox.warning(self, "Falha na Conexão", message)
 
     def ai_generate_section_text(self) -> None:
         """Generate professional technical text using AI and insert it as a content block."""
