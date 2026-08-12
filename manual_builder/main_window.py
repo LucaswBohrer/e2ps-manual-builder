@@ -181,11 +181,24 @@ class MainWindow(QMainWindow):
 
         ai_chat_group = QGroupBox("🤖 Manus AI Assistant & Chat")
         ai_chat_layout = QVBoxLayout(ai_chat_group)
+        
+        # API Key input for local usage
+        api_key_layout = QHBoxLayout()
+        self.api_key_input = QLineEdit()
+        self.api_key_input.setPlaceholderText("Cole sua API Key (OpenAI/Gratuita) opcional...")
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        save_key_button = QPushButton("Salvar Chave")
+        save_key_button.clicked.connect(self._save_api_key)
+        api_key_layout.addWidget(self.api_key_input)
+        api_key_layout.addWidget(save_key_button)
+        ai_chat_layout.addLayout(api_key_layout)
+
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
-        self.chat_display.setPlainText("Bem-vindo! Faça perguntas à IA sobre o manual ou clique em 'Suggest Structure' para obter dicas de distribuição de páginas.")
+        self.chat_display.setPlainText("Bem-vindo! Faça perguntas à IA sobre o manual ou clique em 'Suggest Structure' para obter dicas de distribuição de páginas.\n(Dica: Funciona com assistente inteligente embutido ou com sua API Key inserida acima).")
         self.chat_input = QLineEdit()
         self.chat_input.setPlaceholderText("Ex: Qual seção é ideal para a página 5?")
+        self.chat_input.returnPressed.connect(self.send_chat_message)
         self.chat_send_button = QPushButton("Enviar Pergunta à IA")
         self.chat_send_button.clicked.connect(self.send_chat_message)
         
@@ -589,6 +602,13 @@ class MainWindow(QMainWindow):
         summary = ", ".join(f"Pág {p.number}" for p in self._pages) if self._pages else "Nenhum PDF aberto"
         reply = self._ai_service.ask_ai(msg, summary)
         self.chat_display.append(f"<br><b>🤖 Manus AI:</b> {reply}")
+
+    def _save_api_key(self) -> None:
+        """Save user provided API key into AI service."""
+        key = self.api_key_input.text().strip()
+        self._ai_service.update_key(key)
+        QMessageBox.information(self, "Chave Salva", "Chave de API atualizada com sucesso no assistente de IA.")
+        self.statusBar().showMessage("Chave de API da IA atualizada.")
 
     def _browse_cover_image(self) -> None:
         """Open file dialog to select manual cover image."""

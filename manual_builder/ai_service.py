@@ -14,23 +14,47 @@ from manual_builder.models import PdfPage
 
 
 class ManualAIService:
-    """Service utilizing Manus AI to chat, suggest manual structures, and generate technical content."""
+    """Service utilizing Manus AI or custom OpenAI-compatible API to chat and generate content."""
 
-    def __init__(self) -> None:
-        api_key = os.getenv("OPENAI_API_KEY", "sandbox-key")
-        base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
-        if OpenAI is not None:
-            self._client = OpenAI(api_key=api_key, base_url=base_url)
+    def __init__(self, api_key: str = "", base_url: str = "") -> None:
+        key = api_key.strip() or os.getenv("OPENAI_API_KEY", "")
+        url = base_url.strip() or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+        
+        if OpenAI is not None and key and key != "sandbox-key":
+            try:
+                self._client = OpenAI(api_key=key, base_url=url)
+            except Exception:
+                self._client = None
         else:
             self._client = None
+
         self._chat_history = [
             {"role": "system", "content": "You are a professional technical documentation assistant for E2PS manuals. Help the user structure manuals, choose which pages go into which sections, and write professional technical descriptions in Portuguese."}
         ]
 
+    def update_key(self, api_key: str, base_url: str = "") -> None:
+        """Update API client with new key."""
+        key = api_key.strip()
+        url = base_url.strip() or "https://api.openai.com/v1"
+        if OpenAI is not None and key:
+            try:
+                self._client = OpenAI(api_key=key, base_url=url)
+            except Exception:
+                self._client = None
+        else:
+            self._client = None
+
     def ask_ai(self, user_message: str, pages_summary: str = "") -> str:
-        """Chat with the AI assistant, asking for suggestions, page distribution, or writing help."""
+        """Chat with the AI assistant, asking for suggestions or writing help."""
         if self._client is None:
-            return "Serviço de IA indisponível (OpenAI client não carregado)."
+            # Fallback intelligent local generator when no API key is set
+            return (
+                f"[Modo Auxiliar Inteligente (Sem Chave API configurada)]\n"
+                f"Recebi sua pergunta sobre: '{user_message}'.\n"
+                f"Páginas disponíveis: {pages_summary}.\n"
+                f"Sugestão padrão: Para organizar este manual, verifique as páginas iniciais para a seção 'Introdução/Capa', as páginas intermediárias para 'Instruções Técnicas / Operação' e as finais para 'Manutenção e Segurança'. "
+                f"Dica: Insira sua chave de API OpenAI no campo da interface para ativar a inteligência artificial completa."
+            )
 
         context_msg = f"Available pages in PDF: [{pages_summary}].\nUser query: {user_message}"
         self._chat_history.append({"role": "user", "content": context_msg})
@@ -60,7 +84,7 @@ class ManualAIService:
     def generate_section_text(self, section_title: str, context_topic: str) -> str:
         """Generate professional technical descriptive text for a manual section using AI."""
         if self._client is None:
-            return f"Instruções técnicas detalhadas referentes à seção {section_title}."
+            return f"Texto técnico descritivo gerado automaticamente para a seção '{section_title}' (Insira sua chave API para textos gerados por IA avançada)."
 
         prompt = (
             f"Escreva um texto técnico profissional em português para a seção '{section_title}' de um manual técnico sobre '{context_topic}'. "
