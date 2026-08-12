@@ -14,14 +14,14 @@ O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi 
    - Adicionada capacidade de renomear e gerenciar seções/subseções diretamente pela interface de árvore de navegação.
    - Flexibilidade total para alternar o modo de exportação de cada página (Imagem vs. Texto/Tabela) a qualquer momento.
 
-4. **Projetos E2PS Portáteis (`.emb`)**:
-   - A barra superior agora permite salvar e abrir arquivos `.emb` do E2PS Manual Builder.
+4. **Projetos E2PS Portáteis (`.e2ps`)**:
+   - A barra superior agora permite salvar e abrir arquivos `.e2ps` do E2PS Manual Builder.
    - Cada projeto inclui as páginas originais, recortes, miniaturas, capa, seções, subseções, blocos de texto, ordem do conteúdo, idiomas e modos de exportação.
-   - Os arquivos `.emb` podem ser reabertos posteriormente para continuar a edição sem perder o trabalho já realizado.
+   - Os arquivos `.e2ps` podem ser reabertos posteriormente para continuar a edição sem perder o trabalho já realizado.
 
 5. **Configuração Local da IA**:
    - A API Key, a Base URL e o modelo configurados são mantidos localmente no computador por meio das preferências da aplicação.
-   - Por segurança, a API Key não é gravada nem compartilhada dentro dos arquivos `.emb`.
+   - Por segurança, a API Key não é gravada nem compartilhada dentro dos arquivos `.e2ps`.
 
 6. **Sincronização com o GitHub**:
    - Todas as melhorias foram testadas, validadas e enviadas (*commit and push*) para o repositório oficial.

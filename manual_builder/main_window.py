@@ -76,13 +76,13 @@ class MainWindow(QMainWindow):
         open_images_action.triggered.connect(self.open_images)
         toolbar.addAction(open_images_action)
 
-        open_project_action = QAction("Open Project (.emb)", self)
-        open_project_action.triggered.connect(self.open_emb_project)
+        open_project_action = QAction("Open Project (.e2ps)", self)
+        open_project_action.triggered.connect(self.open_e2ps_project)
         toolbar.addAction(open_project_action)
 
-        self.save_project_action = QAction("Save Project (.emb)", self)
+        self.save_project_action = QAction("Save Project (.e2ps)", self)
         self.save_project_action.setEnabled(False)
-        self.save_project_action.triggered.connect(self.save_emb_project)
+        self.save_project_action.triggered.connect(self.save_e2ps_project)
         toolbar.addAction(self.save_project_action)
         toolbar.addSeparator()
         toolbar.addWidget(QLabel("Manual title:"))
@@ -353,7 +353,7 @@ class MainWindow(QMainWindow):
         }
 
     def _apply_project_metadata(self, metadata: dict[str, object]) -> None:
-        """Restore editable UI controls from an .emb manifest."""
+        """Restore editable UI controls from an .e2ps manifest."""
         self.title_input.setText(str(metadata.get("title", "E2PS Technical Manual")))
         self.code_input.setText(str(metadata.get("code", "")))
         year = str(metadata.get("year", ""))
@@ -383,17 +383,17 @@ class MainWindow(QMainWindow):
             item.setSizeHint(QSize(0, 42))
             self.page_list.addItem(item)
 
-    def save_emb_project(self) -> None:
-        """Save all manual assets and editable structure to a portable .emb project file."""
+    def save_e2ps_project(self) -> None:
+        """Save all manual assets and editable structure to a portable .e2ps project file."""
         if not self._pages:
             QMessageBox.warning(self, "Projeto vazio", "Abra páginas ou imagens antes de salvar o projeto.")
             return
-        suggested_name = self._project_path or Path(self.title_input.text().strip() or "manual_e2ps").with_suffix(".emb")
+        suggested_name = self._project_path or Path(self.title_input.text().strip() or "manual_e2ps").with_suffix(".e2ps")
         filename, _ = QFileDialog.getSaveFileName(
             self,
             "Salvar Projeto E2PS Manual Builder",
             str(suggested_name),
-            "E2PS Manual Builder Project (*.emb)",
+            "E2PS Manual Builder Project (*.e2ps)",
         )
         if not filename:
             return
@@ -413,21 +413,21 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Projeto salvo",
-            "O arquivo .emb foi salvo com as páginas, recortes, capa, seções, subseções e blocos de texto.\n\n"
-            "Por segurança, a chave da IA não é incluída no arquivo .emb; ela permanece apenas neste computador.",
+            "O arquivo .e2ps foi salvo com as páginas, recortes, capa, seções, subseções e blocos de texto.\n\n"
+            "Por segurança, a chave da IA não é incluída no arquivo .e2ps; ela permanece apenas neste computador.",
         )
 
-    def open_emb_project(self) -> None:
-        """Open a portable .emb project and restore it to this app session."""
+    def open_e2ps_project(self) -> None:
+        """Open a portable .e2ps project and restore it to this app session."""
         filename, _ = QFileDialog.getOpenFileName(
             self,
             "Abrir Projeto E2PS Manual Builder",
             "",
-            "E2PS Manual Builder Project (*.emb)",
+            "E2PS Manual Builder Project (*.e2ps *.emb)",
         )
         if not filename:
             return
-        restore_root = Path(self._temp_dir.name) / "restored_emb_project"
+        restore_root = Path(self._temp_dir.name) / "restored_e2ps_project"
         if restore_root.exists():
             import shutil
             shutil.rmtree(restore_root)

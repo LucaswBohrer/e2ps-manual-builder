@@ -1,4 +1,4 @@
-"""Read and write portable E2PS Manual Builder project archives (.emb)."""
+"""Read and write portable E2PS Manual Builder project archives (.e2ps)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ PROJECT_VERSION = 1
 
 @dataclass(slots=True)
 class LoadedProject:
-    """In-memory representation of a restored .emb project."""
+    """In-memory representation of a restored .e2ps project."""
 
     pages: list[PdfPage]
     sections: list[ManualSection]
@@ -26,7 +26,7 @@ class LoadedProject:
 
 
 class ProjectFileService:
-    """Persist a complete, portable manual-building session in a .emb archive."""
+    """Persist a complete, portable manual-building session in a .e2ps archive."""
 
     @staticmethod
     def _page_id(page: PdfPage) -> str:
@@ -67,10 +67,10 @@ class ProjectFileService:
         metadata: dict[str, Any],
         cover_image_path: Path | None,
     ) -> Path:
-        """Save all project assets and editable data in a compressed .emb archive."""
+        """Save all project assets and editable data in a compressed .e2ps archive."""
         archive_path = Path(destination)
-        if archive_path.suffix.lower() != ".emb":
-            archive_path = archive_path.with_suffix(".emb")
+        if archive_path.suffix.lower() != ".e2ps":
+            archive_path = archive_path.with_suffix(".e2ps")
         archive_path.parent.mkdir(parents=True, exist_ok=True)
 
         page_payload: list[dict[str, Any]] = []
@@ -121,7 +121,7 @@ class ProjectFileService:
         """Extract a manifest-declared asset without using zipfile.extract()."""
         safe_relative = Path(asset_name)
         if safe_relative.is_absolute() or ".." in safe_relative.parts:
-            raise ValueError("O arquivo .emb contém um caminho de recurso inválido.")
+            raise ValueError("O arquivo .e2ps contém um caminho de recurso inválido.")
         destination = destination_root / safe_relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(archive.read(asset_name))
@@ -142,10 +142,10 @@ class ProjectFileService:
         return restored
 
     def load_project(self, source: Path, asset_root: Path) -> LoadedProject:
-        """Restore a .emb archive into an isolated working directory."""
+        """Restore a .e2ps archive into an isolated working directory."""
         source = Path(source)
-        if source.suffix.lower() != ".emb":
-            raise ValueError("Selecione um arquivo de projeto E2PS Manual Builder (.emb).")
+        if source.suffix.lower() not in {".e2ps", ".emb"}:
+            raise ValueError("Selecione um arquivo de projeto E2PS Manual Builder (.e2ps).")
         working_root = Path(asset_root)
         working_root.mkdir(parents=True, exist_ok=True)
 
@@ -154,12 +154,12 @@ class ProjectFileService:
                 try:
                     manifest = json.loads(archive.read("project.json").decode("utf-8"))
                 except KeyError as error:
-                    raise ValueError("O arquivo .emb não possui o arquivo project.json.") from error
+                    raise ValueError("O arquivo .e2ps não possui o arquivo project.json.") from error
 
                 if manifest.get("format") != PROJECT_FORMAT:
                     raise ValueError("Este arquivo não é um projeto do E2PS Manual Builder.")
                 if manifest.get("version") != PROJECT_VERSION:
-                    raise ValueError("A versão deste arquivo .emb ainda não é compatível.")
+                    raise ValueError("A versão deste arquivo .e2ps ainda não é compatível.")
 
                 pages: list[PdfPage] = []
                 pages_by_id: dict[str, PdfPage] = {}
@@ -216,5 +216,5 @@ class ProjectFileService:
                     cover_image_path=cover_image_path,
                 )
         except BadZipFile as error:
-            raise ValueError("O arquivo .emb está corrompido ou não é um arquivo válido.") from error
+            raise ValueError("O arquivo .e2ps está corrompido ou não é um arquivo válido.") from error
 ""

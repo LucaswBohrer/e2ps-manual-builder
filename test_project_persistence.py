@@ -54,8 +54,8 @@ def main() -> None:
         }
 
         service = ProjectFileService()
-        archive = service.save_project(root / "manual_teste.emb", [page_1, page_2], sections, metadata, cover)
-        assert archive.is_file(), "O arquivo .emb não foi criado."
+        archive = service.save_project(root / "manual_teste.e2ps", [page_1, page_2], sections, metadata, cover)
+        assert archive.is_file(), "O arquivo .e2ps não foi criado."
         restored = service.load_project(archive, root / "restored")
 
         assert len(restored.pages) == 2
@@ -87,7 +87,7 @@ def main() -> None:
         window.close()
         app.quit()
 
-    print("OK: projeto .emb e persistência local de IA validados")
+    print("OK: projeto .e2ps e persistência local de IA validados")
 
 
 if __name__ == "__main__":
