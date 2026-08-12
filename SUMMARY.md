@@ -1,10 +1,11 @@
-# Relatório Final - Ajuste Fino de Escala para 500px (E2PS Manual Builder)
+# Relatório Final - Otimização de Tokens da IA (E2PS Manual Builder)
 
-O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para ajustar a escala da pré-visualização para que a página caiba 100% no painel:
+O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi atualizado para resolver o erro `413 Rate Limit Exceeded` (Tokens Per Minute - TPM) ao solicitar sugestão de estrutura:
 
-1. **Escala Otimizada para 500px**:
-   - A largura de renderização da página na aba central foi reduzida de `650px` para `500px`.
-   - Com essa largura, a página do PDF se acomoda perfeitamente e por completo dentro da área de visualização, permitindo inspecionar todo o conteúdo visualmente sem cortes nas laterais ou necessidade excessiva de rolagem.
+1. **Otimização de Contexto e Truncamento Inteligente**:
+   - O serviço de IA (`ManualAIService`) foi refatorado para limitar o envio de trechos de texto por página (amostragem inteligente de até 30 páginas e truncamento de trechos para no máximo 128 caracteres).
+   - O histórico de chat foi limitado a uma janela deslizante (últimas 6 mensagens), evitando o crescimento excessivo de tokens acumulados.
+   - O parâmetro `max_tokens` foi delimitado explicitamente (`600` para sugestões e `400` para geração de texto técnico).
 
 2. **Sincronização com o GitHub**:
-   - A modificação foi validada por compilação estática e enviada (*commit and push*) com sucesso para o repositório oficial no GitHub.
+   - A otimização foi testada e enviada (*commit and push*) com sucesso para o repositório oficial no GitHub.

@@ -335,6 +335,7 @@ class MainWindow(QMainWindow):
         self.clear_selection_button.setEnabled(True)
         self.crop_page_button.setEnabled(True)
         self.ai_suggest_button.setEnabled(bool(self._pages))
+        self.add_section_button.setEnabled(bool(self._pages))
         self.statusBar().showMessage(f"Successfully rendered {len(pages)} pages")
 
     def _rendering_failed(self, error: str) -> None:
