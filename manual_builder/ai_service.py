@@ -51,7 +51,7 @@ class ManualAIService:
             return False, f"Falha na conexão: {error}"
 
     def ask_ai(self, user_message: str, pages_summary: str = "") -> str:
-        """Chat with the AI assistant, incorporating real page text context."""
+        """Chat with the AI assistant, incorporating concise page text context."""
         if self._client is None:
             return (
                 f"[Modo Auxiliar Inteligente (Sem Chave API configurada ou cliente inativo)]\n"
@@ -60,36 +60,63 @@ class ManualAIService:
                 f"Dica: Configure sua API Key e URL base (ex: Groq) no painel superior para interagir com a IA real."
             )
 
-        context_msg = f"Conteúdo extraído das páginas do PDF:\n{pages_summary}\n\nPergunta do usuário: {user_message}"
-        self._chat_history.append({"role": "user", "content": context_msg})
+        # Keep chat history bounded (system prompt + last 6 messages max) to avoid TPM limits
+        if len(self._chat_history) > 7:
+            self._chat_history = [self._chat_history[0]] + self._chat_history[-6:]
+
+        # Truncate pages_summary if too large
+        trimmed_summary = pages_summary[:1000] if len(pages_summary) > 1000 else pages_summary
+        context_msg = f"Contexto do PDF (resumido): {trimmed_summary}\n\nPergunta do usuário: {user_message}"
+        
+        messages = self._chat_history + [{"role": "user", "content": context_msg}]
 
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
-                messages=self._chat_history,
+                messages=messages,
                 temperature=0.3,
+                max_tokens=800,
             )
             reply = response.choices[0].message.content.strip()
+            self._chat_history.append({"role": "user", "content": context_msg})
             self._chat_history.append({"role": "assistant", "content": reply})
             return reply
         except Exception as error:
             return f"Erro ao comunicar com a IA ({self._model} @ {self._client.base_url if hasattr(self._client, 'base_url') else 'API'}): {error}"
 
     def suggest_structure_text(self, pages: list[PdfPage], manual_title: str) -> str:
-        """Ask AI to analyze real page contents and suggest manual structure."""
+        """Ask AI to analyze concise page contents and suggest manual structure without hitting token limits."""
+        if self._client is None:
+            return "[Modo Auxiliar] Configure sua API Key para obter sugestões baseadas no conteúdo real do PDF."
+
         content_snippets = []
-        for p in pages:
-            snippet = p.extracted_text[:300].replace("\n", " ")
-            content_snippets.append(f"--- Página {p.number} ---\n{snippet}")
+        # Take at most 30 pages or sample them, and truncate snippet to 120 chars to stay well under TPM limits
+        sampled_pages = pages[:30]
+        for p in sampled_pages:
+            snippet = p.extracted_text[:120].replace("\n", " ").strip()
+            if snippet:
+                content_snippets.append(f"P.{p.number}: {snippet}")
         
-        full_context = "\n".join(content_snippets)
+        full_context = " | ".join(content_snippets)
         prompt = (
-            f"Analise o conteúdo real extraído das {len(pages)} páginas do PDF para o manual '{manual_title}'. "
-            f"Com base no texto real de cada página abaixo, sugira em português uma estrutura de seções e subseções clara, "
-            f"indicando exatamente quais páginas devem pertencer a cada parte (ex: Seção 1: Páginas 1-3, etc.), "
-            f"explicando o raciocínio para ajudar o usuário a organizar o manual:\n\n{full_context}"
+            f"Analise estas {len(sampled_pages)} páginas do PDF '{manual_title}':\n{full_context}\n\n"
+            f"Sugira em português uma estrutura lógica de seções (ex: Introdução, Instalação, Operação, Manutenção) "
+            f"indicando quais páginas devem pertencer a cada parte, de forma concisa e direta."
         )
-        return self.ask_ai(prompt, f"Total de páginas: {len(pages)}")
+
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {"role": "system", "content": "You are a concise technical documentation assistant."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=600,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as error:
+            return f"Erro ao gerar sugestão de estrutura ({self._model}): {error}"
 
     def generate_section_text(self, section_title: str, context_topic: str) -> str:
         """Generate professional technical descriptive text for a manual section using AI."""
@@ -105,6 +132,7 @@ class ManualAIService:
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
+                max_tokens=400,
             )
             return response.choices[0].message.content.strip()
         except Exception as error:
