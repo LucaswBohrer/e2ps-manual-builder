@@ -1,4 +1,4 @@
-"""Background worker threads for non-blocking UI rendering and export."""
+"""Background workers used for PDF and HTML rendering."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import fitz
 from PySide6.QtCore import QThread, Signal
 
-from manual_builder.html_service import HtmlRenderService
+from manual_builder.html_service import HtmlRenderService, HtmlStructurePlan
 from manual_builder.models import PdfPage
 from manual_builder.pdf_service import PdfRenderService
 
@@ -38,10 +38,10 @@ class PdfRenderWorker(QThread):
 
 
 class HtmlRenderWorker(QThread):
-    """Render a static HTML manual in a dedicated Qt thread."""
+    """Render a static HTML manual and analyze its semantic structure in the background."""
 
     progress_changed = Signal(int, int)
-    completed = Signal(list)
+    completed = Signal(list, object)
     failed = Signal(str)
 
     def __init__(self, source: Path, destination: Path) -> None:
@@ -50,13 +50,15 @@ class HtmlRenderWorker(QThread):
         self._destination = destination
 
     def run(self) -> None:
-        """Execute HTML rendering and return standard page objects to the interface."""
+        """Return visual pages and an outline inferred from the source headings and images."""
         try:
-            pages: list[PdfPage] = HtmlRenderService().render(
+            service = HtmlRenderService()
+            pages: list[PdfPage] = service.render(
                 self._source,
                 self._destination,
                 self.progress_changed.emit,
             )
-            self.completed.emit(pages)
+            plan: HtmlStructurePlan = service.analyze_structure(self._source)
+            self.completed.emit(pages, plan)
         except (OSError, RuntimeError, ValueError) as error:
             self.failed.emit(str(error))

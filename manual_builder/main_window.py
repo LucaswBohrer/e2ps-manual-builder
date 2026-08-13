@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from html import escape
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -41,6 +42,7 @@ from manual_builder.models import ManualSection, ManualSubsection, PdfPage
 from manual_builder.ai_service import ManualAIService
 from manual_builder.crop_dialog import CropDialog
 from manual_builder.export_worker import MultilingualExportWorker
+from manual_builder.html_service import HtmlStructurePlan
 from manual_builder.project_service import ProjectExportService
 from manual_builder.project_file_service import ProjectFileService
 from manual_builder.workers import HtmlRenderWorker, PdfRenderWorker
@@ -524,7 +526,7 @@ class MainWindow(QMainWindow):
             shutil.rmtree(destination)
         self._html_render_worker = HtmlRenderWorker(Path(file_path), destination)
         self._html_render_worker.progress_changed.connect(self._update_render_progress)
-        self._html_render_worker.completed.connect(self._rendering_completed)
+        self._html_render_worker.completed.connect(self._html_rendering_completed)
         self._html_render_worker.failed.connect(self._rendering_failed)
 
         self.progress.setRange(0, 100)
@@ -615,6 +617,62 @@ class MainWindow(QMainWindow):
             )
         else:
             self.statusBar().showMessage(f"Carregadas {len(pages)} página(s) do manual.")
+
+    def _html_rendering_completed(
+        self,
+        pages: list[PdfPage],
+        plan: HtmlStructurePlan,
+    ) -> None:
+        """Finalize an HTML import and turn its semantic outline into editable content."""
+        self._rendering_completed(pages)
+        created_sections = self._build_sections_from_html_plan(plan)
+
+        if plan.document_title.strip():
+            self.title_input.setText(plan.document_title.strip())
+
+        self._refresh_sections()
+        self.export_button.setEnabled(bool(self._sections))
+
+        summary = f"Foram criadas {created_sections} seção(ões) editáveis a partir da estrutura do HTML."
+        if plan.image_count:
+            summary += (
+                f" Foram identificadas {plan.image_count} imagem(ns) que precisam ser revisadas "
+                "na pré-visualização e, se necessárias no manual, incluídas como recortes ou capturas."
+            )
+        else:
+            summary += " Nenhuma imagem que exija captura foi identificada na estrutura semântica."
+        self.chat_display.append(
+            "<br><b>🤖 Estrutura HTML criada automaticamente:</b><br>"
+            f"{escape(summary)}"
+        )
+        self.statusBar().showMessage(summary, 9000)
+
+    def _build_sections_from_html_plan(self, plan: HtmlStructurePlan) -> int:
+        """Map the semantic HTML plan to the regular, fully editable manual models."""
+        self._sections.clear()
+        for outline_section in plan.sections:
+            section_content = list(outline_section.content)
+            section_content.extend(hint.message for hint in outline_section.image_hints)
+            subsections = []
+            for outline_subsection in outline_section.subsections:
+                subsection_content = list(outline_subsection.content)
+                subsection_content.extend(
+                    hint.message for hint in outline_subsection.image_hints
+                )
+                subsections.append(
+                    ManualSubsection(
+                        title=outline_subsection.title,
+                        content=subsection_content,
+                    )
+                )
+            self._sections.append(
+                ManualSection(
+                    title=outline_section.title,
+                    content=section_content,
+                    subsections=subsections,
+                )
+            )
+        return len(self._sections)
 
     def _rendering_failed(self, error: str) -> None:
         self.progress.setVisible(False)

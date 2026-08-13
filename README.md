@@ -112,7 +112,7 @@ Use **Open PDF** para abrir documentos PDF, **Open Images** para importar imagen
 |:--|:--|
 | 📄 **PDF** | Renderiza páginas, extrai o texto incorporado quando disponível e permite recortes. |
 | 🖼️ **Imagens** | Importa vários arquivos de uma vez, cria miniaturas e permite recortes. |
-| 🌐 **HTML/HTM** | Renderiza o conteúdo visual em páginas para seleção/recorte e extrai o texto-fonte para a IA, sugestões de estrutura e exportação em Texto/Tabela. |
+| 🌐 **HTML/HTM** | Renderiza o conteúdo visual em páginas para seleção/recorte, lê a hierarquia de cabeçalhos para criar seções e subseções editáveis e extrai o texto-fonte para a IA e a exportação em Texto/Tabela. |
 
 > Para que imagens, CSS e fontes referenciados por um HTML sejam encontrados, mantenha o arquivo HTML e a pasta de recursos original juntos. Arquivos que dependem de login, scripts remotos ou internet podem ter aparência diferente da página exibida no navegador.
 
@@ -122,7 +122,11 @@ Selecione uma página e use a ferramenta de recorte. Você pode criar várias va
 
 ### 🧩 3. Estruture o manual
 
-Crie seções e subseções na árvore de conteúdo. Elas continuam editáveis após a criação: renomeie títulos, reorganize o conteúdo e ajuste o manual conforme a necessidade técnica.
+Crie seções e subseções na árvore de conteúdo. Elas continuam editáveis após a criação: renomeie títulos, adicione ou remova subseções, inclua blocos de texto e ajuste o manual conforme a necessidade técnica.
+
+Ao usar **Open HTML**, o aplicativo interpreta a hierarquia de cabeçalhos do documento e cria automaticamente uma estrutura inicial de seções e subseções. O título principal do HTML é usado como título do manual quando identificado. Essa estrutura é uma base totalmente editável: você pode revisar nomes, acrescentar conteúdo e modificar qualquer seção criada.
+
+> Cada imagem encontrada no HTML é registrada no bloco correspondente como um aviso de captura. Abra a pré-visualização, crie um recorte quando a figura for necessária no manual final e inclua-o na seção indicada. Assim, a aplicação não presume que uma imagem visual possa ser convertida em texto de forma segura.
 
 ### 📝 4. Combine imagens e explicações
 
@@ -255,6 +259,7 @@ O repositório inclui testes locais para verificar a criação e reabertura de p
 ```bash
 python test_project_persistence.py
 QT_QPA_PLATFORM=offscreen python test_html_import.py
+QT_QPA_PLATFORM=offscreen python test_html_window_integration.py
 ```
 
 ---
