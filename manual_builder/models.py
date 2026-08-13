@@ -18,6 +18,14 @@ class PdfPage:
     extracted_text: str = ""
     export_mode: str = "image"  # "image" or "text"
     source_type: str = "pdf"  # "pdf", "image" or "html"
+    # Texto de apoio produzido por visão/OCR para sugerir a estrutura. Ele nunca substitui
+    # ``extracted_text`` e jamais é enviado diretamente ao exportador final.
+    visual_outline_text: str = ""
+
+    @property
+    def analysis_text(self) -> str:
+        """Return safe text for outline analysis without replacing the export source."""
+        return self.extracted_text or self.visual_outline_text
 
     @property
     def filename(self) -> str:

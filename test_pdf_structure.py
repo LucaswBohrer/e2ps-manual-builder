@@ -146,6 +146,13 @@ def test_source_heading_structure_keeps_complete_essential_chapter_ranges() -> N
     assert plan.sections[2].subsections[1].title == "Solução de problemas"
 
 
+def test_translation_cleanup_discards_unclosed_reasoning_and_internal_image_prompts() -> None:
+    raw = """<think>\nThe user wants a transcription of this technical manual page.\nI need to accurately translate the image.\n"""
+
+    assert ManusTranslationService._clean_model_output(raw) == ""
+    assert ProjectExportService._format_rmd_text(raw) == ""
+
+
 def test_translation_cleanup_keeps_only_the_final_translated_content() -> None:
     raw = """Não há necessidade de tradução, pois o texto já está em português.
 TEXT: Safety is fundamental when working with the pump.
@@ -195,6 +202,18 @@ def test_rmarkdown_formatter_reconstructs_overlapping_pdf_sentence_fragments() -
     result = ProjectExportService._format_rmd_text(source)
 
     assert result == "Always read the manual before use."
+
+
+def test_rmarkdown_formatter_reconstructs_long_pdf_overlap_at_line_break() -> None:
+    source = (
+        "Hereafter the User can skip to the relevant section for\n"
+        "for the task to be carried out or for the information needed."
+    )
+
+    formatted = ProjectExportService._format_rmd_text(source)
+
+    assert "section for the task" in formatted
+    assert "for for the task" not in formatted
 
 
 def test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line() -> None:
@@ -427,8 +446,11 @@ def test_scanned_pdf_pages_receive_visual_text_before_structure_analysis() -> No
     finally:
         ManusTranslationService.extract_page_outline_text = original
 
-    assert "disconnect power" in worker._pages[0].extracted_text.lower()
-    assert "commissioning" in worker._pages[1].extracted_text.lower()
+    # A visão auxilia somente a estrutura: não pode contaminar o texto de exportação.
+    assert worker._pages[0].extracted_text == ""
+    assert worker._pages[1].extracted_text == ""
+    assert "disconnect power" in worker._pages[0].visual_outline_text.lower()
+    assert "commissioning" in worker._pages[1].visual_outline_text.lower()
 
     plan = ManualAIService().create_pdf_structure(worker._pages, "Manual escaneado")
     assert plan.sections
@@ -716,6 +738,51 @@ def test_text_mode_page_keeps_extracted_source_when_translation_is_unavailable()
     assert "include_graphics('img/textual_page.png')" not in rmd
 
 
+def test_dense_dimensional_drawing_is_preserved_as_an_image() -> None:
+    source = """Dimensional drawing\nFigure 1\nA12345 12 mm (0.47)\nB22345 18 mm (0.71)\nC32345 24 mm (0.94)\nD42345 30 mm (1.18)"""
+    page = _page(1, source)
+    page = PdfPage(
+        page.number, page.image_path, page.thumbnail_path,
+        extracted_text=source, export_mode="text", source_type="pdf",
+    )
+
+    assert ProjectExportService._source_looks_graphical(page, "Instalação")
+
+
+def test_contaminated_saved_page_never_exports_ai_reasoning_as_manual_text() -> None:
+    with TemporaryDirectory() as temporary_directory:
+        root = Path(temporary_directory)
+        source = root / "contaminated_page.png"
+        source.write_bytes(b"copyable-page")
+        page = PdfPage(
+            number=1,
+            image_path=source,
+            thumbnail_path=source,
+            extracted_text=(
+                "<think>\nThe user wants a transcription of the technical image.\n"
+                "I need to accurately translate it."
+            ),
+            export_mode="text",
+            source_type="pdf",
+        )
+        ProjectExportService()._write_language_project(
+            root / "manual",
+            "Manual de teste",
+            [ManualSection(title="Instalação", content=[page])],
+            "T-005",
+            "2026-08",
+            "pt",
+            translator=_EmptyStructuredTranslator(),
+            translate_images=True,
+        )
+        rmd = (root / "manual" / "manual.rmd").read_text(encoding="utf-8")
+
+    assert "The user wants" not in rmd
+    assert "accurately translate" not in rmd
+    assert "Não foi possível ler automaticamente" in rmd
+    assert "include_graphics('img/contaminated_page.png')" not in rmd
+
+
 def test_visual_marker_preserves_only_the_graphic_page_as_image() -> None:
     with TemporaryDirectory() as temporary_directory:
         root = Path(temporary_directory)
@@ -806,10 +873,12 @@ if __name__ == "__main__":
     test_local_pdf_selection_discards_reference_content_and_keeps_technical_pages()
     test_ai_structure_parser_rejects_invalid_or_duplicate_page_references()
     test_source_heading_structure_keeps_complete_essential_chapter_ranges()
+    test_translation_cleanup_discards_unclosed_reasoning_and_internal_image_prompts()
     test_translation_cleanup_keeps_only_the_final_translated_content()
     test_rmarkdown_formatter_removes_ai_metacommentary_from_saved_text_blocks()
     test_rmarkdown_formatter_removes_duplicate_source_chapter_and_preserves_subheading()
     test_rmarkdown_formatter_reconstructs_overlapping_pdf_sentence_fragments()
+    test_rmarkdown_formatter_reconstructs_long_pdf_overlap_at_line_break()
     test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line()
     test_structured_translation_splits_dense_source_text_on_safe_boundaries()
     test_groq_rate_limit_is_detected_and_the_retry_hint_is_parsed()
@@ -830,6 +899,8 @@ if __name__ == "__main__":
     test_contiguous_text_pages_use_one_section_translation_batch()
     test_text_mode_pdf_page_exports_as_formatted_content()
     test_text_mode_page_keeps_extracted_source_when_translation_is_unavailable()
+    test_dense_dimensional_drawing_is_preserved_as_an_image()
+    test_contaminated_saved_page_never_exports_ai_reasoning_as_manual_text()
     test_visual_marker_preserves_only_the_graphic_page_as_image()
     test_rmarkdown_formatter_removes_nested_duplicate_headings_and_contact_fragments()
     test_image_pages_use_safe_width_and_no_html_tabsets()

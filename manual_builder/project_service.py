@@ -345,12 +345,24 @@ class ProjectExportService:
             return True
         if cls._content_prefers_images(content_title):
             return True
-        text = (page.extracted_text or "").lower()
-        if not text.strip():
+        text = page.extracted_text or ""
+        normalized = text.lower()
+        if not normalized.strip():
             return False
-        has_graphic_marker = any(marker in text for marker in cls._GRAPHIC_TEXT_MARKERS)
-        dimension_heavy = ("ø" in text or "diameter" in text) and len(text) < 1800
-        return has_graphic_marker and (dimension_heavy or len(text) < 700)
+        has_graphic_marker = any(marker in normalized for marker in cls._GRAPHIC_TEXT_MARKERS)
+        # Desenhos de conjunto podem ter muito texto extraível (cotas, códigos e tabelas),
+        # portanto o tamanho do texto não é critério suficiente para classificá-los.
+        drawing_codes = len(re.findall(r"\b[A-Z]{1,5}[ -]?\d{4,}\b", text))
+        dimensions = len(
+            re.findall(
+                r"(?:\b\d+(?:[.,]\d+)?\s*(?:mm|cm|m|in|°)|\(\s*\d+(?:[.,]\d+)?\s*\))",
+                normalized,
+            )
+        )
+        figures = len(re.findall(r"\b(?:figure|figura|fig\.)\s*\d+", normalized))
+        drawing_dense = drawing_codes >= 3 or dimensions >= 4 or figures >= 2
+        dimension_heavy = "ø" in normalized or "diameter" in normalized or "dimens" in normalized
+        return has_graphic_marker and (drawing_dense or dimension_heavy or len(normalized) < 700)
 
     @staticmethod
     def _image_rmd_block(
@@ -367,6 +379,38 @@ class ProjectExportService:
             % (section_index, subsection_index, page_counter, filename)
         )
 
+    @staticmethod
+    def _contains_ai_internal_artifact(value: str) -> bool:
+        """Identify content that is a model instruction or image description, not manual text."""
+        return bool(
+            re.search(
+                r"(?is)\b(?:the\s+user\s+(?:wants|needs|is\s+asking)|"
+                r"i\s+(?:need|should)\s+to\s+(?:transcribe|translate|describe)|"
+                r"the\s+image\s+(?:appears|shows|contains)|"
+                r"need\s+to\s+accurately\s+(?:transcribe|translate)|"
+                r"technical\s+manual\s+(?:page|image)\s+(?:appears|shows))\b",
+                value or "",
+            )
+        )
+
+    @classmethod
+    def _safe_export_source_text(cls, value: str) -> str:
+        """Return source text only when it is safe for final publication.
+
+        Older saved projects may contain visual-analysis text in ``extracted_text``. A single
+        unclosed reasoning tag or prompt-like sentence means that page must be re-read visually
+        or flagged for manual review; it must never be emitted as R Markdown prose.
+        """
+        raw = value or ""
+        if re.search(r"<think(?:\s[^>]*)?>", raw, flags=re.IGNORECASE) and not re.search(
+            r"</think>", raw, flags=re.IGNORECASE
+        ):
+            return ""
+        cleaned = cls._strip_ai_metacommentary(raw)
+        if not cleaned or cls._contains_ai_internal_artifact(cleaned):
+            return ""
+        return cleaned
+
     def _render_textual_page_batch(
         self,
         pages: list[PdfPage],
@@ -381,7 +425,9 @@ class ProjectExportService:
         formatting is fully local and deterministic, with no request to the provider.
         """
         source_text = "\n\n".join(
-            page.extracted_text.strip() for page in pages if page.extracted_text.strip()
+            self._safe_export_source_text(page.extracted_text)
+            for page in pages
+            if self._safe_export_source_text(page.extracted_text)
         ).strip()
         structured_text = source_text
         translate_batch = getattr(translator, "translate_section_text", None) if translator else None
@@ -429,6 +475,7 @@ class ProjectExportService:
                 structured_text = translator.extract_structured_content(page.image_path, language, "")
             except Exception:
                 structured_text = ""
+        structured_text = self._safe_export_source_text(structured_text)
         if structured_text.strip() and structured_text.strip() != "[[KEEP_AS_IMAGE]]":
             return self._format_rmd_text(structured_text, context_title=content_title)
         if structured_text.strip() == "[[KEEP_AS_IMAGE]]":
@@ -475,9 +522,17 @@ class ProjectExportService:
                 continue
 
             page_counter += 1
-            graphical = self._source_looks_graphical(item, content_title)
-            if not graphical and item.extracted_text.strip():
-                pending_text_pages.append(item)
+            safe_source_text = self._safe_export_source_text(item.extracted_text)
+            # Conteúdo contaminado de projeto antigo não pode acionar uma rota de imagem
+            # só porque contém palavras como "figure" ou "drawing" dentro do prompt.
+            contaminated_source = bool(item.extracted_text.strip()) and not safe_source_text
+            graphical = (not contaminated_source) and self._source_looks_graphical(item, content_title)
+            if not graphical and safe_source_text:
+                # A limpeza é gravada na cópia usada para o lote, preservando o objeto
+                # original da interface e garantindo que somente fonte verificável siga
+                # para a tradução por seção.
+                from dataclasses import replace
+                pending_text_pages.append(replace(item, extracted_text=safe_source_text))
                 continue
 
             flush_text_pages()
@@ -516,6 +571,9 @@ class ProjectExportService:
             value or "",
             flags=re.IGNORECASE | re.DOTALL,
         ).strip()
+        incomplete_reasoning = re.search(r"<think(?:\s[^>]*)?>", cleaned, flags=re.IGNORECASE)
+        if incomplete_reasoning:
+            cleaned = cleaned[:incomplete_reasoning.start()].strip()
         result_markers = list(
             re.finditer(
                 r"(?im)^\s*(?:tradu[cç][aã]o|translation|conte[úu]do\s+traduzido|resultado\s+final)\s*:\s*",
@@ -536,9 +594,10 @@ class ProjectExportService:
             r"(?:tradu[cç][aã]o|translation|conte[úu]do\s+traduzido|resultado\s+final)\s*:"
             r")"
         )
-        return "\n".join(
+        cleaned = "\n".join(
             line.rstrip() for line in cleaned.splitlines() if not blocked_line.match(line)
         ).strip()
+        return "" if ProjectExportService._contains_ai_internal_artifact(cleaned) else cleaned
 
     @staticmethod
     def _normalized_heading(value: str) -> str:
@@ -684,7 +743,11 @@ class ProjectExportService:
 
         def can_merge(line: str) -> bool:
             words = line.strip().split()
-            return bool(words) and len(words) <= 18 and not line.lstrip().startswith(("#", "|", "- ", "* "))
+            # Linhas técnicas completas podem ter 25–35 palavras. Ainda assim, uma
+            # sobreposição literal no final/início é segura de recompor e evita o
+            # "for for" observado no manual LKH. Tabelas, listas e títulos continuam
+            # fora desse tratamento.
+            return bool(words) and len(words) <= 48 and not line.lstrip().startswith(("#", "|", "- ", "* "))
 
         repaired: list[str] = []
         for line in deduplicated:

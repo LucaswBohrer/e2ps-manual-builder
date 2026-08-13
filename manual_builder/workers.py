@@ -100,7 +100,10 @@ class PdfStructureWorker(QThread):
         for page in candidates:
             visual_text = vision_service.extract_page_outline_text(page.image_path)
             if len(visual_text.strip()) >= 20:
-                replacement = replace(page, extracted_text=visual_text.strip())
+                # A transcrição visual é somente uma evidência para a sugestão de estrutura.
+                # Nunca sobrescreva ``extracted_text``: ele é o único texto que pode seguir
+                # automaticamente para o R Markdown final.
+                replacement = replace(page, visual_outline_text=visual_text.strip())
                 page_index = self._pages.index(page)
                 self._pages[page_index] = replacement
                 recovered += 1
@@ -114,6 +117,8 @@ class PdfStructureWorker(QThread):
             plan: PdfStructurePlan = service.create_pdf_structure(
                 self._pages, self._manual_title
             )
+            # Preserva exclusivamente o texto selecionável original para a montagem do
+            # manual. Leitura visual de apoio permanece em ``visual_outline_text``.
             plan.extracted_text_by_page = {
                 page.number: page.extracted_text
                 for page in self._pages

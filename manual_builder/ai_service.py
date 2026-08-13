@@ -207,7 +207,7 @@ class ManualAIService:
         """
         lines = [
             re.sub(r"\s+", " ", raw_line).strip(" .:;-–—")
-            for raw_line in page.extracted_text.splitlines()[:14]
+            for raw_line in page.analysis_text.splitlines()[:14]
         ]
         lines = [line for line in lines if line]
         for index, line in enumerate(lines):
@@ -231,7 +231,7 @@ class ManualAIService:
         """Recognize a numbered subsection title and translate known technical labels."""
         lines = [
             re.sub(r"\s+", " ", raw_line).strip(" .:;-–—")
-            for raw_line in page.extracted_text.splitlines()[:42]
+            for raw_line in page.analysis_text.splitlines()[:42]
         ]
         lines = [line for line in lines if line]
         for index, line in enumerate(lines):
@@ -250,7 +250,7 @@ class ManualAIService:
     @staticmethod
     def _is_non_operational_page(page: PdfPage) -> bool:
         """Exclude only clear front-matter/legal pages from source-driven coverage."""
-        text = re.sub(r"\s+", " ", page.extracted_text).lower()
+        text = re.sub(r"\s+", " ", page.analysis_text).lower()
         excluded_terms = (
             "table of contents", "copyright", "all rights reserved", "declaration of conformity",
             "declaration of incorporation", "certificate of conformity", "revision history",
@@ -293,7 +293,7 @@ class ManualAIService:
             )
             chapter_pages = [
                 page for page in ordered_pages[start_index:end_index]
-                if page.extracted_text.strip() and not self._is_non_operational_page(page)
+                if page.analysis_text.strip() and not self._is_non_operational_page(page)
             ]
             if not chapter_pages:
                 continue
@@ -450,7 +450,12 @@ class ManualAIService:
     @staticmethod
     def _clean_model_output(value: str) -> str:
         """Strip common reasoning wrappers and Markdown fences before JSON decoding."""
-        cleaned = re.sub(r"<think>.*?</think>", "", value, flags=re.IGNORECASE | re.DOTALL).strip()
+        cleaned = re.sub(
+            r"<think(?:\s[^>]*)?>.*?</think>", "", value, flags=re.IGNORECASE | re.DOTALL
+        ).strip()
+        incomplete_reasoning = re.search(r"<think(?:\s[^>]*)?>", cleaned, flags=re.IGNORECASE)
+        if incomplete_reasoning:
+            cleaned = cleaned[:incomplete_reasoning.start()].strip()
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE).strip()
         start, end = cleaned.find("{"), cleaned.rfind("}")
         return cleaned[start:end + 1] if start >= 0 and end >= start else cleaned
@@ -464,7 +469,7 @@ class ManualAIService:
         """Build a bounded, numbered context with enough literal text for evidence checking."""
         snippets: list[str] = []
         for page in pages[:60]:
-            excerpt = self._compact_text(page.extracted_text, 420)
+            excerpt = self._compact_text(page.analysis_text, 420)
             if excerpt:
                 snippets.append(f"PÁGINA {page.number}: {excerpt}")
         context = "\n".join(snippets)
@@ -511,7 +516,7 @@ class ManualAIService:
         """Validate a JSON payload and convert it to a safe, de-duplicated page plan."""
         available = {page.number for page in pages}
         page_texts = {
-            page.number: re.sub(r"\s+", " ", page.extracted_text.lower()).strip()
+            page.number: re.sub(r"\s+", " ", page.analysis_text.lower()).strip()
             for page in pages
         }
         used: set[int] = set()
@@ -650,7 +655,7 @@ class ManualAIService:
         """
         available = {page.number for page in pages}
         page_texts = {
-            page.number: re.sub(r"\s+", " ", page.extracted_text.lower()).strip()
+            page.number: re.sub(r"\s+", " ", page.analysis_text.lower()).strip()
             for page in pages
         }
         pattern = re.compile(
@@ -740,7 +745,7 @@ class ManualAIService:
         last_page_number: int | None = None
 
         for page in pages:
-            text = self._compact_text(page.extracted_text, 900).lower()
+            text = self._compact_text(page.analysis_text, 900).lower()
             if not text or any(term in text for term in excluded_terms):
                 last_category = None
                 last_page_number = page.number
@@ -754,7 +759,27 @@ class ManualAIService:
                 for title, terms in categories
             ]
             score, matched_title = max(scored_categories, default=(0, ""))
-            if score:
+            # Uma palavra solta (por exemplo, "warning" na legenda de um desenho)
+            # não é evidência suficiente para nomear uma seção. Um termo forte no
+            # cabeçalho/início da página, por outro lado, é uma evidência válida.
+            heading_text = text[:180]
+            primary_terms = {
+                "Segurança": ("safety", "segurança", "danger"),
+                "Instalação e comissionamento": ("installation", "instala", "mounting", "wiring", "commission"),
+                "Operação": ("operation", "operaç", "operating", "start", "controle"),
+                "Dados técnicos": ("technical data", "dados técnicos", "specification", "rating", "tensão"),
+                "Manutenção e diagnóstico": ("maintenance", "manuten", "troubleshoot", "fault", "diagnostic"),
+            }
+            has_primary_heading = any(
+                term in heading_text for term in primary_terms.get(matched_title, ())
+            )
+            continues_confirmed_topic = (
+                score > 0
+                and matched_title == last_category
+                and last_page_number is not None
+                and page.number == last_page_number + 1
+            )
+            if score >= 2 or has_primary_heading or continues_confirmed_topic:
                 buckets[matched_title].append(page.number)
                 last_category = matched_title
             elif (
@@ -806,7 +831,7 @@ class ManualAIService:
                 )
 
         if not sections and pages:
-            selected = [page.number for page in pages[:selection_limit] if page.extracted_text.strip()]
+            selected = [page.number for page in pages[:selection_limit] if page.analysis_text.strip()]
             if selected:
                 sections.append(
                     PdfStructureSection(
@@ -836,7 +861,7 @@ class ManualAIService:
         for page in pages:
             if page.number not in selected:
                 continue
-            for raw_line in page.extracted_text.splitlines()[:18]:
+            for raw_line in page.analysis_text.splitlines()[:18]:
                 line = re.sub(r"\s+", " ", raw_line).strip(" -–—:|")
                 letters = sum(character.isalpha() for character in line)
                 if (
@@ -888,7 +913,7 @@ class ManualAIService:
         for page in pages:
             if page.number not in selected:
                 continue
-            text = re.sub(r"\s+", " ", page.extracted_text).strip()
+            text = re.sub(r"\s+", " ", page.analysis_text).strip()
             if not text:
                 continue
             for sentence in re.split(r"(?<=[.!?])\s+", text):
@@ -911,7 +936,7 @@ class ManualAIService:
         selected = {number for number in page_numbers}
         for page in pages:
             if page.number in selected:
-                excerpt = ManualAIService._compact_text(page.extracted_text, 180)
+                excerpt = ManualAIService._compact_text(page.analysis_text, 180)
                 if excerpt:
                     return excerpt
         return ""

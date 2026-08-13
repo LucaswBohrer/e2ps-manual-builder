@@ -131,6 +131,11 @@ class ManusTranslationService:
             content,
             flags=re.IGNORECASE | re.DOTALL,
         ).strip()
+        # Respostas cortadas pelo limite de tokens podem deixar ``<think>`` aberto.
+        # Nada que antecede ou pertence a esse raciocínio é conteúdo técnico seguro.
+        incomplete_reasoning = re.search(r"<think(?:\s[^>]*)?>", cleaned, flags=re.IGNORECASE)
+        if incomplete_reasoning:
+            cleaned = cleaned[:incomplete_reasoning.start()].strip()
         cleaned = re.sub(
             r"^```(?:markdown|md|text)?\s*|\s*```$",
             "",
@@ -168,7 +173,16 @@ class ManusTranslationService:
             if not blocked_line.match(line)
         ]
         cleaned = "\n".join(retained_lines).strip()
-        return cleaned
+        # Instruções internas e descrições do próprio modelo não podem virar texto de
+        # manual, mesmo quando não vieram dentro de uma tag de raciocínio.
+        internal_artifact = re.compile(
+            r"(?is)\b(?:the\s+user\s+(?:wants|needs|is\s+asking)|"
+            r"i\s+(?:need|should)\s+to\s+(?:transcribe|translate|describe)|"
+            r"the\s+image\s+(?:appears|shows|contains)|"
+            r"need\s+to\s+accurately\s+(?:transcribe|translate)|"
+            r"technical\s+manual\s+(?:page|image)\s+(?:appears|shows))\b"
+        )
+        return "" if internal_artifact.search(cleaned) else cleaned
 
     @staticmethod
     def _is_rate_limit_error(error: str) -> bool:
