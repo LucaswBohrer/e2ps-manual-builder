@@ -549,7 +549,7 @@ Telefone: +46 0 0
     assert "Desconecte a alimentação" in result
 
 
-def test_image_pages_use_fixed_height_and_no_html_tabsets() -> None:
+def test_image_pages_use_safe_width_and_no_html_tabsets() -> None:
     with TemporaryDirectory() as temporary_directory:
         root = Path(temporary_directory)
         source = root / "visual_page.png"
@@ -573,9 +573,13 @@ def test_image_pages_use_fixed_height_and_no_html_tabsets() -> None:
         )
         rmd = (root / "manual" / "manual.rmd").read_text(encoding="utf-8")
 
-    assert "out.height='0.78\\textheight'" in rmd
+    assert "out.width='94%'" in rmd
+    assert "out.height=" not in rmd
     assert "fig.pos='H'" in rmd
     assert "{.tabset" not in rmd
+    assert "\\setmainfont{Gotham Rounded Book}" in rmd
+    assert "\\vspace{4cm}\n\\newpage" in rmd
+    assert "library(rsvg)" not in rmd
 
 
 if __name__ == "__main__":
@@ -600,5 +604,5 @@ if __name__ == "__main__":
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()
     test_text_mode_pdf_page_exports_as_formatted_content()
     test_rmarkdown_formatter_removes_nested_duplicate_headings_and_contact_fragments()
-    test_image_pages_use_fixed_height_and_no_html_tabsets()
+    test_image_pages_use_safe_width_and_no_html_tabsets()
     print("PDF structure tests passed")

@@ -21,7 +21,7 @@ title: ''
 Autor: E2PS
 header-includes:
   - \usepackage{{fontspec}}
-  - \setmainfont{{Gotham Rounded Book.otf}}[Path=./]
+  - \setmainfont{{Gotham Rounded Book}}
   - \usepackage{{sectsty}}
   - \usepackage{{amsmath}}
   - \usepackage{{unicode-math}}
@@ -45,19 +45,13 @@ header-includes:
   - \hoffset 0cm
   - \voffset -0.7cm
   - \usepackage{{float}}
-  - \usepackage{{placeins}}
   - \usepackage{{setspace}}
   - \usepackage{{multicol}}
-  - \setkeys{{Gin}}{{keepaspectratio}}
-  - \setlength{{\intextsep}}{{8pt}}
-  - \setlength{{\textfloatsep}}{{8pt}}
   - \fancyfoot[C]{{\fontsize{{7}}{{10}}\selectfont E2PS Group | Eigelstein 101 - 113 | 50668 Cologne | Germany PHONE:+49 221 8017 7819 | EMAIL trust@e2ps.com | e2ps.com \fontsize{{8}}{{10}}\selectfont \\ \thepage}}
 output:
   pdf_document:
     includes: null
     latex_engine: lualatex
-    df_print: kable
-    highlight: tango
   html_document:
     toc: yes
     toc_float: yes
@@ -74,11 +68,6 @@ fontsize: 10pt
   h3{{ font-size: 12pt; }}
 </style>
 
-```{{r, include=FALSE}}
-library(rsvg)
-library(magick)
-```
-
 \newpage
 
 <!--#################################################################################################################-->
@@ -86,6 +75,7 @@ library(magick)
 
 \begin{{centering}}
 \vspace{{4cm}}
+\newpage
 
 ```{{r uni_logo, echo=FALSE, out.width="20%"}}
 knitr::include_graphics("LogoHeader.png")
@@ -395,7 +385,7 @@ class ProjectExportService:
                     
                     rendered_blocks.append(
                         "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
-                        "fig.align='center',                         out.width='100%%', out.height='0.78\\textheight', fig.pos='H'}\n"
+                        "fig.align='center', out.width='94%%', fig.pos='H'}\n"
                         "knitr::include_graphics('img/%s')\n```"
                         % (section_index, subsection_index, page_counter, item.filename)
                     )
