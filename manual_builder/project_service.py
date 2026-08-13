@@ -45,8 +45,12 @@ header-includes:
   - \hoffset 0cm
   - \voffset -0.7cm
   - \usepackage{{float}}
+  - \usepackage{{placeins}}
   - \usepackage{{setspace}}
   - \usepackage{{multicol}}
+  - \setkeys{{Gin}}{{keepaspectratio}}
+  - \setlength{{\intextsep}}{{8pt}}
+  - \setlength{{\textfloatsep}}{{8pt}}
   - \fancyfoot[C]{{\fontsize{{7}}{{10}}\selectfont E2PS Group | Eigelstein 101 - 113 | 50668 Cologne | Germany PHONE:+49 221 8017 7819 | EMAIL trust@e2ps.com | e2ps.com \fontsize{{8}}{{10}}\selectfont \\ \thepage}}
 output:
   pdf_document:
@@ -313,14 +317,18 @@ class ProjectExportService:
                     translator,
                     translate_images,
                     on_page_exported,
-                    content_title=subsection.title,
+                    content_title=f"{section.title}\n{subsection.title}",
                 )
-                subsection_blocks.append(f"## {subsection.title}\n\n{sub_content_blocks}")
+                if sub_content_blocks.strip():
+                    subsection_blocks.append(f"## {subsection.title}\n\n{sub_content_blocks}")
 
             all_content = "\n\n".join(
                 part for part in [section_content_blocks, "\n\n".join(subsection_blocks)] if part
             )
-            section_blocks.append(f"# {section.title} {{.tabset .tabset-fade}}\n\n{all_content}")
+            if all_content.strip():
+                # Classes tabset são úteis apenas no HTML e podem aumentar a fragmentação
+                # de páginas no Pandoc/LaTeX. O PDF recebe uma hierarquia simples e estável.
+                section_blocks.append(f"# {section.title}\n\n{all_content}")
 
         content = RMD_TEMPLATE.format(
             title=title.replace("'", "\\'"),
@@ -387,7 +395,7 @@ class ProjectExportService:
                     
                     rendered_blocks.append(
                         "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
-                        "fig.align='center', out.width='100%%'}\n"
+                        "fig.align='center',                         out.width='100%%', out.height='0.78\\textheight', fig.pos='H'}\n"
                         "knitr::include_graphics('img/%s')\n```"
                         % (section_index, subsection_index, page_counter, item.filename)
                     )
@@ -445,19 +453,39 @@ class ProjectExportService:
         no_numbering = re.sub(r"^\s*\d+(?:\.\d+)*\.?\s*", "", no_accents)
         return re.sub(r"[^a-z0-9]+", " ", no_numbering.lower()).strip()
 
+    @staticmethod
+    def _is_contact_fragment_heading(value: str) -> bool:
+        """Identify footer/contact fragments that must never become TOC entries."""
+        normalized = ProjectExportService._normalized_heading(value)
+        return normalized in {
+            "como",
+            "como contatar",
+            "contatar",
+            "contatar alfa",
+            "alfa",
+            "alfa laval",
+            "alfa laval ab",
+            "contact",
+            "contact alfa laval",
+        }
+
     @classmethod
     def _remove_duplicate_source_headings(cls, text: str, context_title: str) -> str:
         """Keep source chapter labels from becoming duplicate E2PS top-level sections."""
-        context = cls._normalized_heading(context_title)
-        context_label = context_title.strip()
-        repeated_context_with_body = (
+        context_labels = [
+            label.strip()
+            for label in re.split(r"[\n|]+", context_title or "")
+            if label.strip()
+        ]
+        contexts = {cls._normalized_heading(label) for label in context_labels}
+        contexts.discard("")
+        repeated_context_with_body = [
             re.compile(
-                rf"^(?:#{1,6}\s*)?\d+(?:\.\d+)*\.?\s*{re.escape(context_label)}\s+(?P<body>.+)$",
+                rf"^(?:#{1,6}\s*)?\d+(?:\.\d+)*\.?\s*{re.escape(label)}\s+(?P<body>.+)$",
                 flags=re.IGNORECASE,
             )
-            if context_label
-            else None
-        )
+            for label in context_labels
+        ]
         result: list[str] = []
         for raw_line in text.splitlines():
             line = raw_line.strip()
@@ -467,7 +495,10 @@ class ProjectExportService:
             # Alguns extratores unem o cabeçalho visual da página ao primeiro
             # parágrafo (por exemplo: "2 Segurança Práticas inseguras...").
             # Removemos só o cabeçalho duplicado e preservamos a instrução real.
-            body_match = repeated_context_with_body.match(line) if repeated_context_with_body else None
+            body_match = next(
+                (pattern.match(line) for pattern in repeated_context_with_body if pattern.match(line)),
+                None,
+            )
             if body_match:
                 body = (body_match.groupdict().get("body") or "").strip()
                 if body:
@@ -478,12 +509,12 @@ class ProjectExportService:
             candidate = match.group(2) if match else line
             candidate = re.sub(r"^\d+(?:\.\d+)*\.?\s*", "", candidate).strip()
             normalized = cls._normalized_heading(candidate)
-            is_context_heading = bool(context and normalized and normalized == context)
+            is_context_heading = bool(normalized and normalized in contexts)
             if is_context_heading:
                 continue
 
             if match:
-                if not candidate:
+                if not candidate or cls._is_contact_fragment_heading(candidate):
                     continue
                 # The E2PS section itself uses H1. Source headings always start at H2
                 # so the table of contents stays clean and manufacturer chapter numbers

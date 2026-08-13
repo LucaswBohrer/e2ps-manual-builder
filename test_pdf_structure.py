@@ -528,6 +528,56 @@ def test_text_mode_pdf_page_exports_as_formatted_content() -> None:
     assert "include_graphics('img/technical_page.png')" not in rmd
 
 
+def test_rmarkdown_formatter_removes_nested_duplicate_headings_and_contact_fragments() -> None:
+    source = """# 2 Segurança
+## 2.2 Precauções de segurança
+Desconecte a alimentação antes de abrir a bomba.
+## Como contatar
+### Alfa Laval
+Telefone: +46 0 0
+"""
+
+    result = ProjectExportService._format_rmd_text(
+        source,
+        context_title="Segurança\nPrecauções de segurança",
+    )
+
+    assert "# 2 Segurança" not in result
+    assert "Precauções de segurança" not in result
+    assert "Como contatar" not in result
+    assert "Alfa Laval" not in result
+    assert "Desconecte a alimentação" in result
+
+
+def test_image_pages_use_fixed_height_and_no_html_tabsets() -> None:
+    with TemporaryDirectory() as temporary_directory:
+        root = Path(temporary_directory)
+        source = root / "visual_page.png"
+        source.write_bytes(b"copyable-image")
+        page = PdfPage(
+            number=1,
+            image_path=source,
+            thumbnail_path=source,
+            extracted_text="",
+            export_mode="image",
+            source_type="pdf",
+        )
+        export = ProjectExportService()
+        export._write_language_project(
+            root / "manual",
+            "Manual de teste",
+            [ManualSection(title="Operação", content=[page])],
+            "T-002",
+            "2026-08",
+            "pt",
+        )
+        rmd = (root / "manual" / "manual.rmd").read_text(encoding="utf-8")
+
+    assert "out.height='0.78\\textheight'" in rmd
+    assert "fig.pos='H'" in rmd
+    assert "{.tabset" not in rmd
+
+
 if __name__ == "__main__":
     test_local_pdf_selection_discards_reference_content_and_keeps_technical_pages()
     test_ai_structure_parser_rejects_invalid_or_duplicate_page_references()
@@ -549,4 +599,6 @@ if __name__ == "__main__":
     test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()
     test_text_mode_pdf_page_exports_as_formatted_content()
+    test_rmarkdown_formatter_removes_nested_duplicate_headings_and_contact_fragments()
+    test_image_pages_use_fixed_height_and_no_html_tabsets()
     print("PDF structure tests passed")
