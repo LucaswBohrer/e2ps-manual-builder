@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 
 from manual_builder.models import ManualSection, ManualSubsection, PdfPage
 from manual_builder.ai_service import ManualAIService
+from manual_builder.content_editor_dialog import ContentEditorDialog
 from manual_builder.crop_dialog import CropDialog
 from manual_builder.export_worker import MultilingualExportWorker
 from manual_builder.html_service import HtmlStructurePlan
@@ -172,6 +173,9 @@ class MainWindow(QMainWindow):
         self.rename_section_button = QPushButton("Rename Selected")
         self.rename_section_button.setEnabled(False)
         self.rename_section_button.clicked.connect(self.rename_selected_item)
+        self.edit_content_button = QPushButton("Editar Conteúdo Selecionado")
+        self.edit_content_button.setEnabled(False)
+        self.edit_content_button.clicked.connect(self.edit_selected_content)
         
         self.subsection_name = QLineEdit()
         self.subsection_name.setPlaceholderText("Subsection name")
@@ -203,6 +207,7 @@ class MainWindow(QMainWindow):
         section_layout.addWidget(self.section_name)
         section_layout.addWidget(self.add_section_button)
         section_layout.addWidget(self.rename_section_button)
+        section_layout.addWidget(self.edit_content_button)
         section_layout.addWidget(self.subsection_name)
         section_layout.addWidget(self.add_subsection_button)
         section_layout.addWidget(self.section_tree)
@@ -687,21 +692,22 @@ class MainWindow(QMainWindow):
         return len(self._sections)
 
     def _pending_image_locations(self) -> list[str]:
-        """Return image-capture notices together with their editable section locations."""
+        """Return only the section/subsection locations that contain image-capture notices."""
         pending: list[str] = []
         for section in self._sections:
             section_location = f"Seção \"{section.title}\""
-            for content in section.content:
-                if isinstance(content, str) and content.startswith("Imagem encontrada:"):
-                    pending.append(f"{section_location}: {content}")
+            if any(
+                isinstance(content, str) and content.startswith("Imagem encontrada:")
+                for content in section.content
+            ):
+                pending.append(section_location)
             for subsection in section.subsections:
-                subsection_location = (
-                    f"{section_location} › Subseção \"{subsection.title}\""
-                )
-                for content in subsection.content:
-                    if isinstance(content, str) and content.startswith("Imagem encontrada:"):
-                        pending.append(f"{subsection_location}: {content}")
-        return pending
+                if any(
+                    isinstance(content, str) and content.startswith("Imagem encontrada:")
+                    for content in subsection.content
+                ):
+                    pending.append(f"{section_location} › Subseção \"{subsection.title}\"")
+        return list(dict.fromkeys(pending))
 
     def _show_pending_image_review(self) -> None:
         """Display in the AI panel where HTML images still require manual capture."""
@@ -722,8 +728,8 @@ class MainWindow(QMainWindow):
         items = "".join(f"<li>{escape(location)}</li>" for location in pending)
         self.chat_display.append(
             "<br><b>🤖 Revisão de imagens pendentes:</b><br>"
-            "As imagens abaixo foram encontradas no HTML, mas ainda precisam ser verificadas "
-            "na pré-visualização e incluídas como recorte/captura se forem necessárias no manual final."
+            "Há imagens pendentes nas partes abaixo. Abra a pré-visualização, crie um recorte "
+            "ou importe uma imagem e, depois, use Editar conteúdo para adicioná-la à parte indicada."
             f"<ol>{items}</ol>"
         )
         self.statusBar().showMessage(
@@ -970,7 +976,8 @@ class MainWindow(QMainWindow):
         self.section_tree.setCurrentItem(item)
 
         menu = QMenu(self)
-        edit_action = menu.addAction("Editar título…")
+        edit_content_action = menu.addAction("Editar conteúdo…")
+        rename_action = menu.addAction("Renomear título…")
         delete_action = menu.addAction("Excluir seção" if item_type == "section" else "Excluir subseção")
         menu.addSeparator()
         move_up_action = menu.addAction(
@@ -989,7 +996,9 @@ class MainWindow(QMainWindow):
             move_down_action.setEnabled(subsection_index < len(siblings) - 1)
 
         selected_action = menu.exec(self.section_tree.viewport().mapToGlobal(position))
-        if selected_action == edit_action:
+        if selected_action == edit_content_action:
+            self.edit_selected_content()
+        elif selected_action == rename_action:
             self.rename_selected_item()
         elif selected_action == delete_action:
             self.remove_selected_section()
@@ -1045,10 +1054,42 @@ class MainWindow(QMainWindow):
         has_selection = current is not None
         self.remove_section_button.setEnabled(has_selection)
         self.rename_section_button.setEnabled(has_selection)
+        self.edit_content_button.setEnabled(has_selection)
         self.add_subsection_button.setEnabled(has_selection)
         self.content_text_input.setEnabled(has_selection)
         self.add_text_block_button.setEnabled(has_selection)
         self.ai_generate_text_button.setEnabled(has_selection)
+
+    def edit_selected_content(self) -> None:
+        """Open the mixed-content editor for the selected section or subsection."""
+        item = self.section_tree.currentItem()
+        if item is None:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data:
+            return
+        item_type, section_index, subsection_index = data
+        target_obj = (
+            self._sections[section_index]
+            if item_type == "section"
+            else self._sections[section_index].subsections[subsection_index]
+        )
+        dialog = ContentEditorDialog(
+            target_obj.title,
+            target_obj.content,
+            self._pages,
+            self,
+        )
+        if dialog.exec() != dialog.DialogCode.Accepted:
+            return
+        target_obj.content = dialog.content
+        self._refresh_sections()
+        if item_type == "section":
+            self.section_tree.setCurrentItem(self.section_tree.topLevelItem(section_index))
+        else:
+            parent = self.section_tree.topLevelItem(section_index)
+            self.section_tree.setCurrentItem(parent.child(subsection_index))
+        self.statusBar().showMessage("Conteúdo da seção atualizado.", 5000)
 
     def rename_selected_item(self) -> None:
         """Rename selected section or subsection using dialog."""

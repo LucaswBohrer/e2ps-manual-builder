@@ -22,7 +22,8 @@ class HtmlImageHint:
 
     @property
     def message(self) -> str:
-        source_note = f" ({self.source})" if self.source else ""
+        safe_source = self.source and not self.source.lower().startswith("data:")
+        source_note = f" ({self.source})" if safe_source else ""
         return (
             f"Imagem encontrada: {self.description}{source_note}. "
             "Abra a pré-visualização HTML, crie um recorte/captura se ela for necessária "
@@ -151,10 +152,12 @@ class _HtmlSemanticExtractor(HTMLParser):
             self._flush_text()
             attributes = {name.lower(): (value or "") for name, value in attrs}
             source = attributes.get("src", "").strip()
+            is_embedded_image = source.lower().startswith("data:image/")
+            source_name = "imagem incorporada no HTML" if is_embedded_image else Path(source).name
             description = (
                 attributes.get("alt", "").strip()
                 or attributes.get("title", "").strip()
-                or Path(source).name
+                or source_name
                 or "imagem sem descrição"
             )
             self._events.append(
