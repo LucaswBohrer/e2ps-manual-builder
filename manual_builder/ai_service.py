@@ -332,7 +332,9 @@ class ManualAIService:
                             PdfStructureSubsection(
                                 title=subsection_title,
                                 page_numbers=subsection_pages,
-                                intro=self._compact_text(raw_subsection.get("intro"), 500),
+                                intro=self._source_backed_intro(
+                                    raw_subsection.get("intro"), subsection_pages, pages
+                                ),
                                 evidence=subsection_evidence,
                             )
                         )
@@ -341,7 +343,9 @@ class ManualAIService:
                     PdfStructureSection(
                         title=title,
                         page_numbers=direct_pages,
-                        intro=self._compact_text(raw_section.get("intro"), 500),
+                        intro=self._source_backed_intro(
+                            raw_section.get("intro"), direct_pages, pages
+                        ),
                         evidence=evidence,
                         subsections=subsections,
                     )
@@ -504,22 +508,48 @@ class ManualAIService:
             "certificate", "certificado", "revision history", "histórico de revisão",
         )
         total = len(pages)
-        selection_limit = min(total, max(6, min(24, math.ceil(total * 0.60))))
+        # A seleção local é uma sugestão editável, não um corte rígido de 60% do
+        # documento. Um limite mais alto preserva páginas correlatas de segurança,
+        # operação e manutenção que normalmente aparecem em sequência.
+        selection_limit = min(total, max(10, min(36, math.ceil(total * 0.85))))
         buckets: dict[str, list[int]] = {title: [] for title, _terms in categories}
         remaining: list[int] = []
+        last_category: str | None = None
+        last_page_number: int | None = None
 
         for page in pages:
             text = self._compact_text(page.extracted_text, 900).lower()
             if not text or any(term in text for term in excluded_terms):
+                last_category = None
+                last_page_number = page.number
                 continue
-            matched = False
-            for title, terms in categories:
-                if any(term in text for term in terms):
-                    buckets[title].append(page.number)
-                    matched = True
-                    break
-            if not matched and len(text) >= 80:
+
+            # Uma página de manutenção contém frequentemente a palavra "operation".
+            # Por isso escolhemos o tema com mais ocorrências, em vez da primeira
+            # categoria que coincidir, evitando deslocar manutenção para Operação.
+            scored_categories = [
+                (sum(text.count(term) for term in terms), title)
+                for title, terms in categories
+            ]
+            score, matched_title = max(scored_categories, default=(0, ""))
+            if score:
+                buckets[matched_title].append(page.number)
+                last_category = matched_title
+            elif (
+                len(text) >= 80
+                and last_category is not None
+                and last_page_number is not None
+                and page.number == last_page_number + 1
+            ):
+                # Páginas consecutivas pouco textuais (diagramas, tabelas ou listas)
+                # frequentemente continuam o assunto da página anterior.
+                buckets[last_category].append(page.number)
+            elif len(text) >= 80:
                 remaining.append(page.number)
+                last_category = None
+            else:
+                last_category = None
+            last_page_number = page.number
 
         selected: list[int] = []
         sections: list[PdfStructureSection] = []
@@ -534,7 +564,7 @@ class ManualAIService:
                         PdfStructureSection(
                             title=title,
                             page_numbers=allowed,
-                            intro="Conteúdo técnico selecionado para esta etapa do manual.",
+                            intro=self._local_source_intro(allowed, pages),
                             evidence=evidence,
                         )
                     )
@@ -548,7 +578,7 @@ class ManualAIService:
                     PdfStructureSection(
                         title=self._local_section_title(allowed, pages),
                         page_numbers=allowed,
-                        intro="Conteúdo técnico identificado diretamente nas páginas selecionadas.",
+                        intro=self._local_source_intro(allowed, pages),
                         evidence=self._local_page_evidence(allowed, pages),
                     )
                 )
@@ -560,7 +590,7 @@ class ManualAIService:
                     PdfStructureSection(
                         title="Conteúdo técnico selecionado",
                         page_numbers=selected,
-                        intro="Páginas técnicas selecionadas para revisão e organização no manual E2PS.",
+                        intro=self._local_source_intro(selected, pages),
                         evidence=self._local_page_evidence(selected, pages),
                     )
                 )
@@ -595,6 +625,63 @@ class ManualAIService:
                 ):
                     return line[:90]
         return "Informações técnicas selecionadas"
+
+    def _source_backed_intro(
+        self,
+        value: object,
+        page_numbers: list[int],
+        pages: list[PdfPage],
+    ) -> str:
+        """Reject boilerplate AI summaries in favour of actual selected-page content."""
+        intro = self._compact_text(value, 500)
+        generic_patterns = (
+            "é fundamental",
+            "e fundamental",
+            "deve ser feita com cuidado",
+            "importante para garantir",
+            "funcionamento correto",
+            "conteúdo técnico selecionado",
+            "conteudo tecnico selecionado",
+            "páginas técnicas selecionadas",
+            "paginas tecnicas selecionadas",
+            "conforme as instruções",
+            "conforme instruções",
+        )
+        normalized = intro.lower()
+        if not intro or any(pattern in normalized for pattern in generic_patterns):
+            return self._local_source_intro(page_numbers, pages)
+        return intro
+
+    @staticmethod
+    def _local_source_intro(page_numbers: list[int], pages: list[PdfPage]) -> str:
+        """Reuse actual source sentences as a neutral, auditable fallback introduction.
+
+        The introductory block is placed in the editable section before its pages. Returning
+        real content is preferable to inventing a generic Portuguese sentence that suggests
+        technical completeness without conveying the manufacturer instructions.
+        """
+        selected = set(page_numbers)
+        snippets: list[str] = []
+        total_length = 0
+        for page in pages:
+            if page.number not in selected:
+                continue
+            text = re.sub(r"\s+", " ", page.extracted_text).strip()
+            if not text:
+                continue
+            for sentence in re.split(r"(?<=[.!?])\s+", text):
+                sentence = sentence.strip()
+                if len(sentence) < 35:
+                    continue
+                if total_length + len(sentence) > 460:
+                    break
+                snippets.append(sentence)
+                total_length += len(sentence) + 1
+                if len(snippets) >= 2:
+                    break
+            if len(snippets) >= 2 or total_length >= 460:
+                break
+        return " ".join(snippets) or ManualAIService._local_page_evidence(page_numbers, pages)
 
     @staticmethod
     def _local_page_evidence(page_numbers: list[int], pages: list[PdfPage]) -> str:

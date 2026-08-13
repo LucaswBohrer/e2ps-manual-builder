@@ -392,6 +392,43 @@ class ProjectExportService:
         return "\n\n".join(rendered_blocks)
 
     @staticmethod
+    def _strip_ai_metacommentary(value: str) -> str:
+        """Remove AI explanations and source/translation wrappers from exportable text.
+
+        This is intentionally a second safety layer after the translation service: text blocks
+        may also come from an older saved project or be pasted directly by the user.
+        """
+        cleaned = re.sub(
+            r"<think(?:\s[^>]*)?>.*?</think>",
+            "",
+            value or "",
+            flags=re.IGNORECASE | re.DOTALL,
+        ).strip()
+        result_markers = list(
+            re.finditer(
+                r"(?im)^\s*(?:tradu[cç][aã]o|translation|conte[úu]do\s+traduzido|resultado\s+final)\s*:\s*",
+                cleaned,
+            )
+        )
+        if result_markers:
+            final_block = cleaned[result_markers[-1].end():].strip()
+            if final_block:
+                cleaned = final_block
+
+        blocked_line = re.compile(
+            r"(?i)^\s*(?:"
+            r"n[aã]o\s+h[aá]\s+necessidade\s+de\s+tradu[cç][aã]o|"
+            r"o\s+texto\s+j[aá]\s+est[aá]|"
+            r"(?:aqui\s+est[aá]|segue)\s+(?:a\s+)?tradu[cç][aã]o|"
+            r"(?:texto|text|texto\s+original|original|source)\s*:|"
+            r"(?:tradu[cç][aã]o|translation|conte[úu]do\s+traduzido|resultado\s+final)\s*:"
+            r")"
+        )
+        return "\n".join(
+            line.rstrip() for line in cleaned.splitlines() if not blocked_line.match(line)
+        ).strip()
+
+    @staticmethod
     def _format_rmd_text(value: str) -> str:
         """Normalize human/AI text into safe, readable R Markdown.
 
@@ -399,7 +436,8 @@ class ProjectExportService:
         normalized, and short consecutive ``rótulo: valor`` lines become a table so technical
         data remains legible after knitting to PDF.
         """
-        text = value.replace("\r\n", "\n").replace("\r", "\n").strip()
+        text = ProjectExportService._strip_ai_metacommentary(value)
+        text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
         text = re.sub(r"^```(?:markdown|md)?\s*|\s*```$", "", text, flags=re.IGNORECASE).strip()
         if not text:
             return ""

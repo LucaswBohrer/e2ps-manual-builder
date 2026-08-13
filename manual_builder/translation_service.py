@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Protocol
 
@@ -94,14 +95,60 @@ class ManusTranslationService:
 
     @staticmethod
     def _clean_model_output(content: str | None) -> str:
-        """Discard hidden reasoning and return only safe user-facing model text."""
+        """Return only final technical content, never model commentary or echoed source text.
+
+        Alguns modelos devolvem uma explicação antes do resultado, como ``TEXT:`` seguido
+        do texto original e um bloco ``Tradução:``. Esse formato é útil somente para a
+        conversa, mas não pode chegar ao R Markdown. Quando há um rótulo de resultado,
+        apenas o conteúdo posterior ao último rótulo é preservado; nos demais casos,
+        linhas de raciocínio, rótulos e comentários conhecidos são descartados.
+        """
         if not content:
             return ""
-        cleaned = content.strip()
-        # Modelos de raciocínio podem devolver o pensamento interno em `content`.
-        # Esse material nunca pode ir para o PDF nem ser desenhado em uma imagem.
-        if "<think" in cleaned.lower() or "</think>" in cleaned.lower():
+
+        cleaned = re.sub(
+            r"<think(?:\s[^>]*)?>.*?</think>",
+            "",
+            content,
+            flags=re.IGNORECASE | re.DOTALL,
+        ).strip()
+        cleaned = re.sub(
+            r"^```(?:markdown|md|text)?\s*|\s*```$",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        ).strip()
+        if not cleaned:
             return ""
+
+        # Preferir explicitamente o bloco final de tradução/resultado quando o modelo
+        # tiver retornado uma comparação entre fonte e destino.
+        result_markers = list(
+            re.finditer(
+                r"(?im)^\s*(?:tradu[cç][aã]o|translation|conte[úu]do\s+traduzido|resultado\s+final)\s*:\s*",
+                cleaned,
+            )
+        )
+        if result_markers:
+            final_block = cleaned[result_markers[-1].end():].strip()
+            if final_block:
+                cleaned = final_block
+
+        blocked_line = re.compile(
+            r"(?i)^\s*(?:"
+            r"n[aã]o\s+h[aá]\s+necessidade\s+de\s+tradu[cç][aã]o|"
+            r"o\s+texto\s+j[aá]\s+est[aá]|"
+            r"(?:aqui\s+est[aá]|segue)\s+(?:a\s+)?tradu[cç][aã]o|"
+            r"(?:texto|text|texto\s+original|original|source)\s*:|"
+            r"(?:tradu[cç][aã]o|translation|conte[úu]do\s+traduzido|resultado\s+final)\s*:"
+            r")"
+        )
+        retained_lines = [
+            line.rstrip()
+            for line in cleaned.splitlines()
+            if not blocked_line.match(line)
+        ]
+        cleaned = "\n".join(retained_lines).strip()
         return cleaned
 
     def _vision_completion(self, prompt: str, encoded_image: str, max_tokens: int) -> str:
@@ -179,7 +226,9 @@ class ManusTranslationService:
             "de duas ou mais colunas, reconstrua-os como uma tabela Markdown. Preserve listas e a ordem "
             "do conteúdo. Use parágrafos curtos, listas Markdown para procedimentos ou avisos e tabelas "
             "Markdown para dados técnicos. Retorne APENAS o Markdown final, sem explicações, sem bloco "
-            "de código e sem marcadores de raciocínio.\n\n"
+            "de código e sem marcadores de raciocínio. Não escreva rótulos como `TEXT:`, `Texto original:`, "
+            "`Tradução:` ou `Resultado:` e não repita o conteúdo de origem antes da versão final. Inicie "
+            "diretamente pelo primeiro título, parágrafo, lista ou tabela do manual.\n\n"
             f"CONTEÚDO-FONTE EXTRAÍDO:\n{source_text[:18000]}"
         )
         try:
@@ -187,7 +236,7 @@ class ManusTranslationService:
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=2200,
+                max_tokens=3000,
                 timeout=25.0,
             )
             return self._clean_model_output(response.choices[0].message.content)
@@ -247,9 +296,10 @@ class ManusTranslationService:
                 "Não mantenha palavras ou frases no idioma de origem; traduza títulos, cabeçalhos, rótulos, "
                 "observações e células de tabela. Reconstrua todas as tabelas em Markdown limpo e legível. "
                 "Mantenha códigos, unidades (V, A, kW, Hz) e referências técnicas exatas. Retorne apenas o "
-                "conteúdo Markdown traduzido, sem introduções, comentários ou blocos <think>."
+                "conteúdo Markdown traduzido, sem introduções, comentários, texto-fonte ecoado, rótulos "
+                "como `TEXT:` ou `Tradução:`, nem blocos <think>."
             )
-            response_text = self._vision_completion(prompt, encoded_string, max_tokens=1800)
+            response_text = self._vision_completion(prompt, encoded_string, max_tokens=2800)
             return self._clean_model_output(response_text)
         except Exception:
             return ""

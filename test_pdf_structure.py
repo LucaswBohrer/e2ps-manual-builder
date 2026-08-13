@@ -111,6 +111,33 @@ def test_ai_structure_parser_rejects_generic_sections_without_page_evidence() ->
     assert plan.selected_page_numbers == []
 
 
+def test_translation_cleanup_keeps_only_the_final_translated_content() -> None:
+    raw = """Não há necessidade de tradução, pois o texto já está em português.
+TEXT: Safety is fundamental when working with the pump.
+Tradução:
+A segurança é fundamental ao trabalhar com a bomba.
+"""
+
+    result = ManusTranslationService._clean_model_output(raw)
+
+    assert result == "A segurança é fundamental ao trabalhar com a bomba."
+    assert "TEXT:" not in result
+    assert "Não há necessidade" not in result
+
+
+def test_rmarkdown_formatter_removes_ai_metacommentary_from_saved_text_blocks() -> None:
+    raw = """TEXT: Original safety instruction.
+Tradução:
+- Desconecte a alimentação antes da manutenção.
+"""
+
+    result = ProjectExportService._format_rmd_text(raw)
+
+    assert result == "- Desconecte a alimentação antes da manutenção."
+    assert "TEXT:" not in result
+    assert "Tradução:" not in result
+
+
 def test_text_outline_parser_builds_sections_with_real_page_evidence() -> None:
     pages = [
         _page(2, "Safety warning: disconnect the equipment before maintenance."),
@@ -226,6 +253,51 @@ def test_scanned_pdf_pages_receive_visual_text_before_structure_analysis() -> No
     plan = ManualAIService().create_pdf_structure(worker._pages, "Manual escaneado")
     assert plan.sections
     assert {section.title for section in plan.sections} >= {"Segurança", "Instalação e comissionamento"}
+
+
+def test_pdf_plan_replaces_generic_ai_intro_with_selected_page_content() -> None:
+    pages = [
+        _page(
+            2,
+            "Safety warning: disconnect the equipment before maintenance. "
+            "Never service the equipment while hot.",
+        ),
+    ]
+    payload = {
+        "document_title": "Bomba",
+        "sections": [
+            {
+                "title": "Segurança",
+                "intro": "A segurança é fundamental ao trabalhar com a bomba.",
+                "evidence": "disconnect the equipment before maintenance",
+                "pages": [2],
+            }
+        ],
+    }
+
+    plan = ManualAIService()._parse_pdf_structure(json.dumps(payload), pages, "Bomba")
+
+    assert plan.sections[0].intro.startswith("Safety warning")
+    assert "é fundamental" not in plan.sections[0].intro
+
+
+def test_local_grouping_keeps_related_pages_and_uses_source_backed_intro() -> None:
+    pages = [
+        _page(1, "Safety warning: disconnect the equipment before maintenance."),
+        _page(2, "Caution: never touch the pump while it is hot."),
+        _page(
+            3,
+            "General maintenance. Replace worn seals and inspect the motor guard every 12 months.",
+        ),
+    ]
+
+    plan = ManualAIService().create_pdf_structure(pages, "Bomba")
+    sections = {section.title: section for section in plan.sections}
+
+    assert sections["Segurança"].page_numbers == [1, 2]
+    assert sections["Manutenção e diagnóstico"].page_numbers == [3]
+    assert "Conteúdo técnico selecionado" not in sections["Segurança"].intro
+    assert "Safety warning" in sections["Segurança"].intro
 
 
 def test_local_selection_uses_a_real_heading_when_no_category_matches() -> None:
