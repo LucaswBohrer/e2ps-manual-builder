@@ -64,6 +64,7 @@ class MainWindow(QMainWindow):
         self._render_worker: PdfRenderWorker | None = None
         self._html_render_worker: HtmlRenderWorker | None = None
         self._pdf_structure_worker: PdfStructureWorker | None = None
+        self._last_pdf_structure_plan: PdfStructurePlan | None = None
         self._export_worker: MultilingualExportWorker | None = None
         self._ai_service = ManualAIService()
         self._cover_image_path: Path | None = None
@@ -492,6 +493,7 @@ class MainWindow(QMainWindow):
             return
         self._pages.clear()
         self._sections.clear()
+        self._last_pdf_structure_plan = None
         self._project_path = None
         self.page_list.clear()
         self.section_tree.clear()
@@ -527,6 +529,7 @@ class MainWindow(QMainWindow):
 
         self._pages.clear()
         self._sections.clear()
+        self._last_pdf_structure_plan = None
         self._project_path = None
         self.page_list.clear()
         self.section_tree.clear()
@@ -566,6 +569,7 @@ class MainWindow(QMainWindow):
         
         self._pages.clear()
         self._sections.clear()
+        self._last_pdf_structure_plan = None
         self._project_path = None
         self.page_list.clear()
         self.section_tree.clear()
@@ -647,6 +651,8 @@ class MainWindow(QMainWindow):
         ]
         if not pdf_pages:
             return
+        self._last_pdf_structure_plan = None
+        self.ai_suggest_button.setEnabled(False)
         self._pdf_structure_worker = PdfStructureWorker(
             pdf_pages,
             self.title_input.text().strip(),
@@ -664,6 +670,8 @@ class MainWindow(QMainWindow):
     def _pdf_structure_completed(self, plan: PdfStructurePlan) -> None:
         """Convert the selected PDF outline into the same editable section models used by HTML."""
         if not plan.sections:
+            self._last_pdf_structure_plan = plan
+            self.ai_suggest_button.setEnabled(True)
             message = plan.note or "Não foi possível identificar conteúdo técnico suficiente no PDF."
             self.chat_display.append(
                 "<br><b>🤖 Análise automática do PDF:</b><br>" + escape(message)
@@ -671,6 +679,8 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(message, 9000)
             return
 
+        self._last_pdf_structure_plan = plan
+        self.ai_suggest_button.setEnabled(True)
         created_sections = self._build_sections_from_pdf_plan(plan)
         default_title = "E2PS Technical Manual"
         if plan.document_title.strip() and (
@@ -692,7 +702,9 @@ class MainWindow(QMainWindow):
         if plan.note:
             summary += " " + plan.note
         self.chat_display.append(
-            "<br><b>🤖 Estrutura enxuta do PDF criada:</b><br>" + escape(summary)
+            "<br><b>🤖 Estrutura enxuta do PDF criada:</b><br>"
+            + escape(summary)
+            + self._format_pdf_plan_evidence(plan)
         )
         self.statusBar().showMessage(summary, 12000)
 
@@ -702,10 +714,35 @@ class MainWindow(QMainWindow):
             "As páginas foram carregadas, mas a estrutura automática do PDF não pôde ser criada: "
             f"{error}"
         )
+        self.ai_suggest_button.setEnabled(bool(self._pages))
         self.chat_display.append(
             "<br><b>🤖 Análise automática do PDF:</b><br>" + escape(message)
         )
         self.statusBar().showMessage(message, 10000)
+
+    def _format_pdf_plan_evidence(self, plan: PdfStructurePlan) -> str:
+        """Present each chosen group with page numbers and a literal excerpt from the PDF."""
+        lines: list[str] = []
+        for section in plan.sections:
+            section_pages = ", ".join(str(number) for number in section.page_numbers)
+            label = f"<b>{escape(section.title)}</b>"
+            if section_pages:
+                label += f" — páginas {escape(section_pages)}"
+            if section.evidence:
+                label += f"<br><span style='color:#4B5563'>Evidência: “{escape(section.evidence)}”</span>"
+            lines.append(label)
+            for subsection in section.subsections:
+                subsection_pages = ", ".join(str(number) for number in subsection.page_numbers)
+                sub_label = f"&nbsp;&nbsp;• <b>{escape(subsection.title)}</b>"
+                if subsection_pages:
+                    sub_label += f" — páginas {escape(subsection_pages)}"
+                if subsection.evidence:
+                    sub_label += (
+                        f"<br>&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:#4B5563'>"
+                        f"Evidência: “{escape(subsection.evidence)}”</span>"
+                    )
+                lines.append(sub_label)
+        return "<br><br><b>Seleção verificável no PDF:</b><br>" + "<br>".join(lines) if lines else ""
 
     def _build_sections_from_pdf_plan(self, plan: PdfStructurePlan) -> int:
         """Map an AI-selected PDF plan to editable mixed content blocks.
@@ -1304,13 +1341,30 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Bloco de texto inserido na seção com sucesso.")
 
     def ai_suggest_structure(self) -> None:
-        """Ask Manus AI to analyze pages and provide structural suggestions in the chat panel."""
+        """Show the latest evidence-based PDF selection instead of requesting a generic outline."""
         if not self._pages:
             QMessageBox.warning(self, "No pages", "Open a PDF first.")
             return
-        suggestion = self._ai_service.suggest_structure_text(self._pages, self.title_input.text())
-        self.chat_display.append(f"\n<b>🤖 [Sugestão de Estrutura da IA]:</b><br>{suggestion}<br>")
-        self.statusBar().showMessage("IA gerou sugestão de estrutura no painel de chat.")
+        plan = self._last_pdf_structure_plan
+        if plan is None:
+            QMessageBox.information(
+                self,
+                "Análise em andamento",
+                "A análise do PDF ainda está sendo concluída. Aguarde a seleção baseada nas páginas reais.",
+            )
+            return
+        if not plan.sections:
+            message = plan.note or "Não foi possível selecionar conteúdo técnico suficiente no PDF."
+            QMessageBox.information(self, "Seleção do PDF", message)
+            return
+        text = (
+            "<br><b>🤖 [Seleção fundamentada do PDF]:</b><br>"
+            "Esta lista usa somente páginas e trechos encontrados no PDF carregado."
+            + self._format_pdf_plan_evidence(plan)
+            + "<br>"
+        )
+        self.chat_display.append(text)
+        self.statusBar().showMessage("Seleção fundamentada do PDF exibida no painel de IA.")
 
     def _test_ai_connection(self) -> None:
         """Test API connection with current settings."""

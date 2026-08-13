@@ -24,6 +24,7 @@ class PdfStructureSubsection:
     title: str
     page_numbers: list[int] = field(default_factory=list)
     intro: str = ""
+    evidence: str = ""
 
 
 @dataclass(slots=True)
@@ -33,6 +34,7 @@ class PdfStructureSection:
     title: str
     page_numbers: list[int] = field(default_factory=list)
     intro: str = ""
+    evidence: str = ""
     subsections: list[PdfStructureSubsection] = field(default_factory=list)
 
 
@@ -120,38 +122,22 @@ class ManualAIService:
             return f"Erro ao comunicar com a IA ({self._model} @ {self._client.base_url if hasattr(self._client, 'base_url') else 'API'}): {error}"
 
     def suggest_structure_text(self, pages: list[PdfPage], manual_title: str) -> str:
-        """Ask AI to analyze concise page contents and suggest manual structure without hitting token limits."""
-        if self._client is None:
-            return "[Modo Auxiliar] Configure sua API Key para obter sugestões baseadas no conteúdo real do PDF."
-
-        content_snippets = []
-        # Take at most 30 pages or sample them, and truncate snippet to 120 chars to stay well under TPM limits
-        sampled_pages = pages[:30]
-        for p in sampled_pages:
-            snippet = p.extracted_text[:120].replace("\n", " ").strip()
-            if snippet:
-                content_snippets.append(f"P.{p.number}: {snippet}")
-        
-        full_context = " | ".join(content_snippets)
-        prompt = (
-            f"Analise estas {len(sampled_pages)} páginas do PDF '{manual_title}':\n{full_context}\n\n"
-            f"Sugira em português uma estrutura lógica de seções (ex: Introdução, Instalação, Operação, Manutenção) "
-            f"indicando quais páginas devem pertencer a cada parte, de forma concisa e direta."
-        )
-
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": "You are a concise technical documentation assistant."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=600,
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as error:
-            return f"Erro ao gerar sugestão de estrutura ({self._model}): {error}"
+        """Return an auditable selection summary instead of an ungrounded free-form outline."""
+        plan = self.create_pdf_structure(pages, manual_title)
+        if not plan.sections:
+            return plan.note or "Não foi possível encontrar conteúdo técnico suficiente no PDF."
+        lines = [plan.note] if plan.note else []
+        for section in plan.sections:
+            page_list = ", ".join(str(number) for number in section.page_numbers)
+            evidence = f" Evidência: “{section.evidence}”." if section.evidence else ""
+            lines.append(f"{section.title} — páginas {page_list}.{evidence}")
+            for subsection in section.subsections:
+                sub_pages = ", ".join(str(number) for number in subsection.page_numbers)
+                sub_evidence = (
+                    f" Evidência: “{subsection.evidence}”." if subsection.evidence else ""
+                )
+                lines.append(f"  - {subsection.title} — páginas {sub_pages}.{sub_evidence}")
+        return "\n".join(lines)
 
     def create_pdf_structure(self, pages: list[PdfPage], manual_title: str) -> PdfStructurePlan:
         """Create a compact E2PS outline, selecting only useful manufacturer-PDF content.
@@ -187,10 +173,12 @@ class ManualAIService:
             "Priorize segurança, instalação/comissionamento, operação, manutenção/diagnóstico e dados "
             "técnicos indispensáveis. Se uma categoria não estiver presente, não a invente.\n\n"
             "Retorne APENAS JSON válido, sem Markdown, neste formato:\n"
-            '{"document_title":"...","sections":[{"title":"...","intro":"máximo duas frases em português baseadas no texto","pages":[1],"subsections":[{"title":"...","intro":"...","pages":[2]}]}]}\n\n'
+            '{"document_title":"...","sections":[{"title":"...","intro":"máximo duas frases em português","evidence":"trecho literal de pelo menos 12 caracteres extraído de uma página selecionada","pages":[1],"subsections":[{"title":"...","intro":"...","evidence":"trecho literal da página","pages":[2]}]}]}\n\n'
             "Regras obrigatórias: no máximo 8 seções; cada página aparece no máximo uma vez; escolha "
-            "apenas páginas realmente necessárias; use somente números das páginas fornecidas; textos "
-            "de introdução não podem criar especificações não existentes.\n\n"
+            "apenas páginas realmente necessárias; use somente números das páginas fornecidas; cada grupo "
+            "com páginas deve conter evidence, uma citação literal verificável de uma das suas próprias "
+            "páginas. Não use títulos genéricos como Introdução, Descrição Técnica ou Referências se não "
+            "houver evidência explícita. Textos de introdução não podem criar especificações não existentes.\n\n"
             f"Título informado: {manual_title or 'Manual técnico'}\n\nPáginas extraídas:\n{context}"
         )
         try:
@@ -220,7 +208,8 @@ class ManualAIService:
             return fallback
 
         fallback.note = (
-            "A resposta da IA não continha uma estrutura válida; foi criada uma seleção local editável."
+            "A resposta da IA não continha uma estrutura com evidências verificáveis nas páginas do PDF; "
+            "foi criada uma seleção local editável baseada no texto extraído."
         )
         return fallback
 
@@ -238,14 +227,33 @@ class ManualAIService:
         return text[:limit].rstrip()
 
     def _pdf_page_context(self, pages: list[PdfPage]) -> str:
-        """Build a bounded context that fits free-tier TPM limits while retaining page coverage."""
+        """Build a bounded, numbered context with enough literal text for evidence checking."""
         snippets: list[str] = []
         for page in pages[:60]:
-            excerpt = self._compact_text(page.extracted_text, 260)
+            excerpt = self._compact_text(page.extracted_text, 420)
             if excerpt:
                 snippets.append(f"PÁGINA {page.number}: {excerpt}")
         context = "\n".join(snippets)
-        return context[:16000]
+        return context[:18000]
+
+    @staticmethod
+    def _evidence_matches_pages(evidence: str, page_numbers: list[int], page_texts: dict[int, str]) -> bool:
+        """Require a cited fragment to be materially present in at least one selected page."""
+        normalized_evidence = re.sub(r"\s+", " ", evidence.lower()).strip()
+        if len(normalized_evidence) < 12:
+            return False
+        evidence_tokens = set(re.findall(r"[a-zà-ÿ0-9]{4,}", normalized_evidence))
+        if len(evidence_tokens) < 2:
+            return False
+        for page_number in page_numbers:
+            page_text = page_texts.get(page_number, "")
+            if normalized_evidence in page_text:
+                return True
+            page_tokens = set(re.findall(r"[a-zà-ÿ0-9]{4,}", page_text))
+            overlap = len(evidence_tokens & page_tokens)
+            if overlap >= 3 and overlap / len(evidence_tokens) >= 0.70:
+                return True
+        return False
 
     def _parse_pdf_structure(
         self,
@@ -256,6 +264,10 @@ class ManualAIService:
         """Validate model JSON and convert it to a safe, de-duplicated page plan."""
         payload = json.loads(self._clean_model_output(raw))
         available = {page.number for page in pages}
+        page_texts = {
+            page.number: re.sub(r"\s+", " ", page.extracted_text.lower()).strip()
+            for page in pages
+        }
         used: set[int] = set()
         sections: list[PdfStructureSection] = []
         raw_sections = payload.get("sections", []) if isinstance(payload, dict) else []
@@ -269,6 +281,11 @@ class ManualAIService:
             if not title:
                 continue
             direct_pages = self._valid_unused_pages(raw_section.get("pages"), available, used)
+            evidence = self._compact_text(raw_section.get("evidence"), 260)
+            if direct_pages and not self._evidence_matches_pages(evidence, direct_pages, page_texts):
+                for page_number in direct_pages:
+                    used.discard(page_number)
+                direct_pages = []
             subsections: list[PdfStructureSubsection] = []
             raw_subsections = raw_section.get("subsections", [])
             if isinstance(raw_subsections, list):
@@ -279,12 +296,20 @@ class ManualAIService:
                     subsection_pages = self._valid_unused_pages(
                         raw_subsection.get("pages"), available, used
                     )
+                    subsection_evidence = self._compact_text(raw_subsection.get("evidence"), 260)
+                    if subsection_pages and not self._evidence_matches_pages(
+                        subsection_evidence, subsection_pages, page_texts
+                    ):
+                        for page_number in subsection_pages:
+                            used.discard(page_number)
+                        subsection_pages = []
                     if subsection_title and subsection_pages:
                         subsections.append(
                             PdfStructureSubsection(
                                 title=subsection_title,
                                 page_numbers=subsection_pages,
                                 intro=self._compact_text(raw_subsection.get("intro"), 500),
+                                evidence=subsection_evidence,
                             )
                         )
             if direct_pages or subsections:
@@ -293,6 +318,7 @@ class ManualAIService:
                         title=title,
                         page_numbers=direct_pages,
                         intro=self._compact_text(raw_section.get("intro"), 500),
+                        evidence=evidence,
                         subsections=subsections,
                     )
                 )
@@ -369,11 +395,13 @@ class ManualAIService:
                 allowed = page_numbers[: max(0, selection_limit - len(selected))]
                 if allowed:
                     selected.extend(allowed)
+                    evidence = self._local_page_evidence(allowed, pages)
                     sections.append(
                         PdfStructureSection(
                             title=title,
                             page_numbers=allowed,
                             intro="Conteúdo técnico selecionado para esta etapa do manual.",
+                            evidence=evidence,
                         )
                     )
         if len(selected) < selection_limit:
@@ -387,8 +415,10 @@ class ManualAIService:
                         title="Informações técnicas essenciais",
                         page_numbers=allowed,
                         intro="Informações operacionais e técnicas relevantes selecionadas do fabricante.",
+                        evidence=self._local_page_evidence(allowed, pages),
                     )
                 )
+
         if not sections and pages:
             selected = [page.number for page in pages[:selection_limit] if page.extracted_text.strip()]
             if selected:
@@ -397,8 +427,10 @@ class ManualAIService:
                         title="Conteúdo técnico selecionado",
                         page_numbers=selected,
                         intro="Páginas técnicas selecionadas para revisão e organização no manual E2PS.",
+                        evidence=self._local_page_evidence(selected, pages),
                     )
                 )
+
         available = {page.number for page in pages}
         return PdfStructurePlan(
             document_title=manual_title.strip(),
@@ -406,6 +438,17 @@ class ManualAIService:
             selected_page_numbers=sorted(selected),
             omitted_page_numbers=sorted(available - set(selected)),
         )
+
+    @staticmethod
+    def _local_page_evidence(page_numbers: list[int], pages: list[PdfPage]) -> str:
+        """Produce a short literal excerpt so local selections remain auditable in the UI."""
+        selected = {number for number in page_numbers}
+        for page in pages:
+            if page.number in selected:
+                excerpt = ManualAIService._compact_text(page.extracted_text, 180)
+                if excerpt:
+                    return excerpt
+        return ""
 
     def generate_section_text(self, section_title: str, context_topic: str) -> str:
         """Generate professional technical descriptive text for a manual section using AI."""

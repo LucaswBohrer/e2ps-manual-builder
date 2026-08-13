@@ -125,7 +125,7 @@ Selecione uma página e use a ferramenta de recorte. Você pode criar várias va
 
 Crie seções e subseções na árvore de conteúdo. Elas continuam editáveis após a criação: renomeie títulos, adicione ou remova subseções, inclua blocos de texto e ajuste o manual conforme a necessidade técnica.
 
-Ao usar **Open PDF**, a aplicação analisa o texto extraído em segundo plano e cria uma proposta inicial de estrutura. Ela prioriza segurança, instalação, operação, manutenção, solução de problemas e dados técnicos; páginas de índice, capa, marketing, referências ou duplicadas são deixadas de fora quando identificadas. A proposta não é uma cópia integral do manual do fabricante: cada seção e cada página criada podem ser ajustadas ou removidas no **Editar conteúdo** antes da exportação.
+Ao usar **Open PDF**, a aplicação analisa o texto extraído em segundo plano e cria uma proposta inicial de estrutura. Ela prioriza segurança, instalação, operação, manutenção, solução de problemas e dados técnicos; páginas de índice, capa, marketing, referências ou duplicadas são deixadas de fora quando identificadas. A proposta não é uma cópia integral do manual do fabricante: cada seção selecionada precisa apresentar uma **evidência literal verificável** no texto de uma de suas páginas. Respostas genéricas, páginas inexistentes ou títulos sem suporte no PDF são rejeitados; nesse caso, o aplicativo usa somente uma seleção local editável baseada no texto extraído. Cada seção e cada página criada podem ser ajustadas ou removidas no **Editar conteúdo** antes da exportação.
 
 Clique com o **botão direito** sobre uma seção ou subseção para abrir o menu de contexto. Por ele, é possível **editar o conteúdo**, renomear o título, excluir o item ou movê-lo para cima/baixo na ordem do manual. As subseções são movidas somente dentro da seção à qual pertencem, preservando a hierarquia do documento.
 
@@ -157,7 +157,7 @@ Antes de fechar o aplicativo — e ao concluir cada etapa importante — use **S
 
 ### 💬 Assistente de IA
 
-O painel de IA permite fazer perguntas sobre o manual, solicitar textos técnicos de apoio e obter sugestões de como distribuir as páginas entre seções e subseções. Ao importar um **PDF**, a análise automática cria uma estrutura inicial enxuta; o comando **Suggest Structure** continua sendo apenas uma sugestão no painel, sem alterar a estrutura atual. Em ambos os casos, a decisão final permanece com você, pois todos os itens podem ser editados antes da exportação.
+O painel de IA permite fazer perguntas sobre o manual e solicitar textos técnicos de apoio. Ao importar um **PDF**, a análise automática cria uma estrutura inicial enxuta; o comando **Suggest Structure** exibe essa mesma seleção fundamentada, com as páginas e evidências literais do documento, sem alterar a estrutura atual. O painel não aceita mais uma sugestão livre ou genérica sem vínculo verificável com o PDF carregado. Em todos os casos, a decisão final permanece com você, pois todos os itens podem ser editados antes da exportação.
 
 ### ☁️ Configuração com GroqCloud
 

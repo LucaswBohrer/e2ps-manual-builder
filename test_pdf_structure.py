@@ -47,22 +47,37 @@ def test_local_pdf_selection_discards_reference_content_and_keeps_technical_page
     assert len(plan.selected_page_numbers) == len(set(plan.selected_page_numbers))
     assert any(section.title == "Segurança" for section in plan.sections)
     assert any(section.title == "Dados técnicos" for section in plan.sections)
+    assert all(section.evidence for section in plan.sections)
 
 
 def test_ai_structure_parser_rejects_invalid_or_duplicate_page_references() -> None:
-    pages = [_page(2, "Safety"), _page(3, "Installation"), _page(4, "Operation")]
+    pages = [
+        _page(2, "Safety warning: disconnect the equipment before maintenance."),
+        _page(3, "Installation instructions: mount the control cabinet correctly."),
+        _page(4, "Operation procedure: start the system and observe indicators."),
+    ]
     payload = {
         "document_title": "Painel de controle",
         "sections": [
             {
                 "title": "Segurança",
                 "intro": "Verifique as proteções antes do uso.",
+                "evidence": "disconnect the equipment before maintenance",
                 "pages": [2, 2, 999],
                 "subsections": [
-                    {"title": "Instalação", "intro": "Monte corretamente.", "pages": [3, 2]},
+                    {
+                        "title": "Instalação",
+                        "intro": "Monte corretamente.",
+                        "evidence": "mount the control cabinet correctly",
+                        "pages": [3, 2],
+                    },
                 ],
             },
-            {"title": "Operação", "pages": [4]},
+            {
+                "title": "Operação",
+                "evidence": "start the system and observe indicators",
+                "pages": [4],
+            },
         ],
     }
 
@@ -73,6 +88,25 @@ def test_ai_structure_parser_rejects_invalid_or_duplicate_page_references() -> N
     assert plan.sections[0].page_numbers == [2]
     assert plan.sections[0].subsections[0].page_numbers == [3]
     assert plan.sections[1].page_numbers == [4]
+
+
+def test_ai_structure_parser_rejects_generic_sections_without_page_evidence() -> None:
+    pages = [
+        _page(1, "Motor overload protection is configured through the relay settings."),
+        _page(2, "Connect the control cable to terminal X1 before energizing the panel."),
+    ]
+    payload = {
+        "document_title": "Manual genérico",
+        "sections": [
+            {"title": "Introdução", "intro": "Visão geral do sistema.", "pages": [1]},
+            {"title": "Operação", "intro": "Use o equipamento conforme instruções.", "pages": [2]},
+        ],
+    }
+
+    plan = ManualAIService()._parse_pdf_structure(json.dumps(payload), pages, "Manual")
+
+    assert plan.sections == []
+    assert plan.selected_page_numbers == []
 
 
 def test_pdf_plan_creates_editable_text_mode_content_in_main_window() -> None:
@@ -111,6 +145,38 @@ def test_pdf_plan_creates_editable_text_mode_content_in_main_window() -> None:
         assert subsection.content[0] == "Fixe o equipamento em superfície adequada."
         assert isinstance(subsection.content[1], PdfPage)
         assert subsection.content[1].export_mode == "text"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection() -> None:
+    pages = [_page(2, "Safety warning: disconnect the equipment before maintenance.")]
+    plan = PdfStructurePlan(
+        document_title="Painel de teste",
+        sections=[
+            PdfStructureSection(
+                title="Segurança",
+                page_numbers=[2],
+                evidence="disconnect the equipment before maintenance",
+            )
+        ],
+        selected_page_numbers=[2],
+        used_ai=True,
+    )
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        window._pages = pages
+        window._last_pdf_structure_plan = plan
+        window.ai_suggest_structure()
+        rendered_text = window.chat_display.toPlainText()
+        assert "Seleção fundamentada do PDF" in rendered_text
+        assert "páginas 2" in rendered_text
+        assert "disconnect the equipment before maintenance" in rendered_text
+        assert "Sugestão de Estrutura da IA" not in rendered_text
     finally:
         window.close()
         app.processEvents()
@@ -187,6 +253,7 @@ if __name__ == "__main__":
     test_local_pdf_selection_discards_reference_content_and_keeps_technical_pages()
     test_ai_structure_parser_rejects_invalid_or_duplicate_page_references()
     test_pdf_plan_creates_editable_text_mode_content_in_main_window()
+    test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()
     test_text_mode_pdf_page_exports_as_formatted_content()
     print("PDF structure tests passed")
