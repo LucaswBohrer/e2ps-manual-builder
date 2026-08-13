@@ -243,6 +243,26 @@ class ManusTranslationService:
         except Exception:
             return ""
 
+    @staticmethod
+    def _requires_visual_layout_reconstruction(source_text: str) -> bool:
+        """Detect PDF extraction symptoms that cannot safely become linear Markdown.
+
+        PDF text extraction can preserve words while losing columns, callout boxes and reading
+        order. In these cases the page image is a more reliable source for the final manual.
+        """
+        text = source_text or ""
+        if not text.strip():
+            return True
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if any(line.count("|") >= 6 for line in lines):
+            return True
+        if re.search(r"(?i)\b([\wÀ-ÿ]{3,})\s+\1\s+\1\b", text):
+            return True
+        for index in range(len(lines) - 2):
+            if lines[index] == lines[index + 1] == lines[index + 2] and len(lines[index]) >= 3:
+                return True
+        return False
+
     def extract_page_outline_text(self, source: Path) -> str:
         """Read a visual PDF page when the original document has no selectable text.
 
@@ -275,7 +295,8 @@ class ManusTranslationService:
         source_text: str = "",
     ) -> str:
         """Extract and translate content as structured Markdown using HTML source or AI Vision."""
-        if source_text.strip():
+        source_needs_visual_layout = self._requires_visual_layout_reconstruction(source_text)
+        if source_text.strip() and not source_needs_visual_layout:
             structured = self._structured_source_completion(source_text, target_language)
             if structured:
                 return structured
@@ -290,17 +311,32 @@ class ManusTranslationService:
 
             lang_name = LANGUAGE_NAMES.get(target_language, "Brazilian Portuguese")
             prompt = (
-                "Você é um especialista em tradução de manuais técnicos industriais. "
-                "Analise esta imagem de página de manual e extraia TODO o conteúdo textual e tabelas. "
+                "Você é um editor de manuais técnicos industriais e deve RECONSTRUIR o layout desta única "
+                "página, não apenas transcrever palavras em ordem visual. Extraia todo o conteúdo útil e "
                 f"TRADUZA ABSOLUTAMENTE TODO O TEXTO para {lang_name}. "
-                "Não mantenha palavras ou frases no idioma de origem; traduza títulos, cabeçalhos, rótulos, "
-                "observações e células de tabela. Reconstrua todas as tabelas em Markdown limpo e legível. "
-                "Mantenha códigos, unidades (V, A, kW, Hz) e referências técnicas exatas. Retorne apenas o "
-                "conteúdo Markdown traduzido, sem introduções, comentários, texto-fonte ecoado, rótulos "
+                "Mantenha códigos, números, unidades (V, A, kW, Hz) e referências técnicas exatas. "
+                "Aplique obrigatoriamente estas regras: "
+                "(1) ignore rodapés, números de página, logotipos e o número/título do capítulo quando ele "
+                "apenas repete a seção principal; "
+                "(2) cada cabeçalho deve ocupar sua própria linha Markdown e procedimentos devem usar listas "
+                "numeradas ou marcadores; "
+                "(3) se uma caixa de aviso, coluna ou painel repetir visualmente palavras como 'Etapa', "
+                "'Sempre', 'Atenção' ou 'Perigo', escreva cada instrução apenas uma vez, no sentido lógico; "
+                "(4) reconstrua tabelas em linhas Markdown completas, com cabeçalho, separador e uma linha por "
+                "registro, jamais em uma única linha; "
+                "(5) não invente nem resuma instruções técnicas. "
+                "Retorne somente o Markdown final, sem explicações, comentários, texto-fonte ecoado, rótulos "
                 "como `TEXT:` ou `Tradução:`, nem blocos <think>."
             )
-            response_text = self._vision_completion(prompt, encoded_string, max_tokens=2800)
-            return self._clean_model_output(response_text)
+            response_text = self._vision_completion(prompt, encoded_string, max_tokens=3600)
+            structured = self._clean_model_output(response_text)
+            if structured:
+                return structured
+            # If visual reading is temporarily unavailable, preserve the text path rather
+            # than silently losing the page. The exporter can still fall back to its image.
+            if source_text.strip():
+                return self._structured_source_completion(source_text, target_language)
+            return ""
         except Exception:
             return ""
 

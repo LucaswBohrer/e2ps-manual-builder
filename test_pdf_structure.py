@@ -138,6 +138,49 @@ Tradução:
     assert "Tradução:" not in result
 
 
+def test_rmarkdown_formatter_removes_duplicate_source_chapter_and_preserves_subheading() -> None:
+    raw = """2 Segurança Práticas inseguras e outras informações importantes são enfatizadas.
+# 2 Segurança
+## 2.1 Informações importantes
+### AVISO
+Desconecte a alimentação antes da manutenção.
+"""
+
+    result = ProjectExportService._format_rmd_text(raw, context_title="Segurança")
+
+    assert "# 2 Segurança" not in result
+    assert "Práticas inseguras" in result
+    assert "### Informações importantes" in result
+    assert "#### AVISO" in result
+
+
+def test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line() -> None:
+    raw = "Verifique a entrega: | Item | Descrição | --- | --- | 1 | Bomba completa | 2 | Nota de entrega |"
+
+    result = ProjectExportService._format_rmd_text(raw)
+
+    assert "Verifique a entrega:" in result
+    assert "| Item | Descrição |" in result
+    assert "| 1 | Bomba completa |" in result
+    assert "| 2 | Nota de entrega |" in result
+
+
+def test_layout_detection_routes_repeated_or_collapsed_pdf_text_to_visual_reading() -> None:
+    assert ManusTranslationService._requires_visual_layout_reconstruction(
+        """Etapa
+Etapa
+Etapa
+Sempre leia os dados técnicos."""
+    )
+    assert ManusTranslationService._requires_visual_layout_reconstruction(
+        "| Item | Descrição | --- | --- | 1 | Bomba |"
+    )
+    assert not ManusTranslationService._requires_visual_layout_reconstruction(
+        """Desconecte a alimentação antes da manutenção.
+Use peças genuínas."""
+    )
+
+
 def test_text_outline_parser_builds_sections_with_real_page_evidence() -> None:
     pages = [
         _page(2, "Safety warning: disconnect the equipment before maintenance."),
@@ -425,10 +468,17 @@ def test_text_mode_pdf_page_exports_as_formatted_content() -> None:
 if __name__ == "__main__":
     test_local_pdf_selection_discards_reference_content_and_keeps_technical_pages()
     test_ai_structure_parser_rejects_invalid_or_duplicate_page_references()
+    test_translation_cleanup_keeps_only_the_final_translated_content()
+    test_rmarkdown_formatter_removes_ai_metacommentary_from_saved_text_blocks()
+    test_rmarkdown_formatter_removes_duplicate_source_chapter_and_preserves_subheading()
+    test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line()
+    test_layout_detection_routes_repeated_or_collapsed_pdf_text_to_visual_reading()
     test_text_outline_parser_builds_sections_with_real_page_evidence()
     test_text_outline_parser_rejects_generic_or_unmatched_titles()
     test_scanned_pdf_pages_receive_visual_text_before_structure_analysis()
     test_local_selection_uses_a_real_heading_when_no_category_matches()
+    test_pdf_plan_replaces_generic_ai_intro_with_selected_page_content()
+    test_local_grouping_keeps_related_pages_and_uses_source_backed_intro()
     test_empty_pdf_text_explains_that_visual_read_is_required()
     test_pdf_plan_creates_editable_text_mode_content_in_main_window()
     test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()

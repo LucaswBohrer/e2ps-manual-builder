@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import unicodedata
 from datetime import date
 from pathlib import Path
 from typing import Callable
@@ -298,6 +299,7 @@ class ProjectExportService:
                 translator,
                 translate_images,
                 on_page_exported,
+                content_title=section.title,
             )
 
             subsection_blocks: list[str] = []
@@ -311,6 +313,7 @@ class ProjectExportService:
                     translator,
                     translate_images,
                     on_page_exported,
+                    content_title=subsection.title,
                 )
                 subsection_blocks.append(f"## {subsection.title}\n\n{sub_content_blocks}")
 
@@ -338,6 +341,7 @@ class ProjectExportService:
         translator: TranslationService | None,
         translate_images: bool,
         on_page_exported: Callable[[], None] | None,
+        content_title: str = "",
     ) -> str:
         """Render mixed list of PdfPages and text snippets in exact user order."""
         rendered_blocks: list[str] = []
@@ -345,7 +349,7 @@ class ProjectExportService:
         for item in content_items:
             if isinstance(item, str):
                 if item.strip():
-                    rendered_blocks.append(self._format_rmd_text(item))
+                    rendered_blocks.append(self._format_rmd_text(item, context_title=content_title))
             elif isinstance(item, PdfPage):
                 page_counter += 1
 
@@ -368,7 +372,9 @@ class ProjectExportService:
                     )
 
                 if structured_text.strip():
-                    rendered_blocks.append(self._format_rmd_text(structured_text))
+                    rendered_blocks.append(
+                        self._format_rmd_text(structured_text, context_title=content_title)
+                    )
                 else:
                     # Para o modo de imagem, sobrescrever a cópia inicial pelo resultado
                     # visual traduzido. No fallback do modo texto, manter a imagem original.
@@ -429,7 +435,104 @@ class ProjectExportService:
         ).strip()
 
     @staticmethod
-    def _format_rmd_text(value: str) -> str:
+    def _normalized_heading(value: str) -> str:
+        """Create a comparison key for document headings without numbering or accents."""
+        no_accents = "".join(
+            character
+            for character in unicodedata.normalize("NFD", value or "")
+            if unicodedata.category(character) != "Mn"
+        )
+        no_numbering = re.sub(r"^\s*\d+(?:\.\d+)*\.?\s*", "", no_accents)
+        return re.sub(r"[^a-z0-9]+", " ", no_numbering.lower()).strip()
+
+    @classmethod
+    def _remove_duplicate_source_headings(cls, text: str, context_title: str) -> str:
+        """Keep source chapter labels from becoming duplicate E2PS top-level sections."""
+        context = cls._normalized_heading(context_title)
+        context_label = context_title.strip()
+        repeated_context_with_body = (
+            re.compile(
+                rf"^(?:#{1,6}\s*)?\d+(?:\.\d+)*\.?\s*{re.escape(context_label)}\s+(?P<body>.+)$",
+                flags=re.IGNORECASE,
+            )
+            if context_label
+            else None
+        )
+        result: list[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if re.fullmatch(r"\d+(?:\.\d+)*\.?", line):
+                continue
+
+            # Alguns extratores unem o cabeçalho visual da página ao primeiro
+            # parágrafo (por exemplo: "2 Segurança Práticas inseguras...").
+            # Removemos só o cabeçalho duplicado e preservamos a instrução real.
+            body_match = repeated_context_with_body.match(line) if repeated_context_with_body else None
+            if body_match:
+                body = (body_match.groupdict().get("body") or "").strip()
+                if body:
+                    result.append(body)
+                    continue
+
+            match = re.match(r"^(#{1,6})\s*(.*?)\s*$", line)
+            candidate = match.group(2) if match else line
+            candidate = re.sub(r"^\d+(?:\.\d+)*\.?\s*", "", candidate).strip()
+            normalized = cls._normalized_heading(candidate)
+            is_context_heading = bool(context and normalized and normalized == context)
+            if is_context_heading:
+                continue
+
+            if match:
+                if not candidate:
+                    continue
+                # The E2PS section itself uses H1. Source headings always start at H2
+                # so the table of contents stays clean and manufacturer chapter numbers
+                # do not create a second top-level hierarchy.
+                depth = min(max(len(match.group(1)) + 1, 2), 4)
+                result.extend(["", f"{'#' * depth} {candidate}", ""])
+            else:
+                result.append(raw_line.rstrip())
+        return "\n".join(result)
+
+    @staticmethod
+    def _expand_inline_markdown_tables(text: str) -> str:
+        """Recover tables flattened by OCR/vision into a single line of pipe tokens."""
+        repaired: list[str] = []
+        for raw_line in text.splitlines():
+            first_pipe = raw_line.find("|")
+            if first_pipe < 0 or raw_line.count("|") < 6:
+                repaired.append(raw_line.rstrip())
+                continue
+
+            prefix = raw_line[:first_pipe].strip()
+            cells = [cell.strip() for cell in raw_line[first_pipe:].split("|") if cell.strip()]
+            column_count = 0
+            for candidate_count in range(2, min(6, len(cells) // 2) + 1):
+                separators = cells[candidate_count : candidate_count * 2]
+                if len(separators) == candidate_count and all(
+                    re.fullmatch(r":?-{2,}:?", cell) for cell in separators
+                ):
+                    column_count = candidate_count
+                    break
+            if not column_count:
+                repaired.append(raw_line.rstrip())
+                continue
+
+            if prefix:
+                repaired.extend([prefix, ""])
+            header = cells[:column_count]
+            repaired.append("| " + " | ".join(header) + " |")
+            repaired.append("| " + " | ".join("---" for _ in header) + " |")
+            data_cells = cells[column_count * 2 :]
+            for offset in range(0, len(data_cells), column_count):
+                row = data_cells[offset : offset + column_count]
+                if len(row) == column_count:
+                    repaired.append("| " + " | ".join(row) + " |")
+            repaired.append("")
+        return "\n".join(repaired)
+
+    @staticmethod
+    def _format_rmd_text(value: str, context_title: str = "") -> str:
         """Normalize human/AI text into safe, readable R Markdown.
 
         Existing Markdown tables and ordered lists are preserved. Plain bullet markers are
@@ -439,6 +542,8 @@ class ProjectExportService:
         text = ProjectExportService._strip_ai_metacommentary(value)
         text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
         text = re.sub(r"^```(?:markdown|md)?\s*|\s*```$", "", text, flags=re.IGNORECASE).strip()
+        text = ProjectExportService._expand_inline_markdown_tables(text)
+        text = ProjectExportService._remove_duplicate_source_headings(text, context_title)
         if not text:
             return ""
 
@@ -477,6 +582,15 @@ class ProjectExportService:
                     normalized.append(f"| {safe_label} | {safe_description} |")
                 normalized.append("")
                 index = cursor
+                continue
+
+            if re.match(r"^#{2,6}\s+", line):
+                if normalized and normalized[-1]:
+                    normalized.append("")
+                normalized.append(line)
+                if index + 1 < len(lines) and lines[index + 1].strip():
+                    normalized.append("")
+                index += 1
                 continue
 
             line = re.sub(r"^[•‣▪◦]\s*", "- ", line)
