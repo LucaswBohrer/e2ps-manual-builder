@@ -68,14 +68,11 @@ fontsize: 10pt
   h3{{ font-size: 12pt; }}
 </style>
 
-\newpage
-
 <!--#################################################################################################################-->
 <!--Capa PDF -->
 
 \begin{{centering}}
-\vspace{{4cm}}
-\newpage
+\vspace{{2.2cm}}
 
 ```{{r uni_logo, echo=FALSE, out.width="20%"}}
 knitr::include_graphics("LogoHeader.png")
@@ -369,7 +366,8 @@ class ProjectExportService:
                         item.extracted_text,
                     )
 
-                if structured_text.strip():
+                keep_as_image = structured_text.strip() == "[[KEEP_AS_IMAGE]]"
+                if structured_text.strip() and not keep_as_image:
                     rendered_blocks.append(
                         self._format_rmd_text(structured_text, context_title=content_title)
                     )

@@ -200,6 +200,16 @@ def test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line() -> None:
     assert "| 2 | Nota de entrega |" in result
 
 
+def test_structured_translation_splits_dense_source_text_on_safe_boundaries() -> None:
+    source = ("Linha técnica com valor nominal e procedimento de manutenção.\n" * 180).strip()
+
+    chunks = ManusTranslationService._source_text_chunks(source, maximum_characters=500)
+
+    assert len(chunks) > 1
+    assert all(len(chunk) <= 500 for chunk in chunks)
+    assert "procedimento de manutenção" in "\n".join(chunks)
+
+
 def test_layout_detection_routes_repeated_or_collapsed_pdf_text_to_visual_reading() -> None:
     assert ManusTranslationService._requires_visual_layout_reconstruction(
         """Etapa
@@ -256,8 +266,16 @@ def test_text_outline_parser_rejects_generic_or_unmatched_titles() -> None:
     assert plan.selected_page_numbers == []
 
 
-def test_pdf_plan_creates_editable_text_mode_content_in_main_window() -> None:
-    pages = [_page(2, "Safety"), _page(3, "Installation")]
+def test_pdf_plan_classifies_textual_and_graphical_pages_in_main_window() -> None:
+    dense_text = (
+        "Safety precautions must be followed before operating the pump. "
+        "Disconnect the electrical supply before maintenance and verify that the process line "
+        "is depressurized. Operators must use approved protective equipment and report damage. "
+    ) * 4
+    pages = [
+        _page(2, dense_text),
+        _page(3, "Warning symbols\nFigure 3\nCaution\nDanger"),
+    ]
     plan = PdfStructurePlan(
         document_title="Manual de teste",
         sections=[
@@ -291,7 +309,30 @@ def test_pdf_plan_creates_editable_text_mode_content_in_main_window() -> None:
         assert section.content[1].export_mode == "text"
         assert subsection.content[0] == "Fixe o equipamento em superfície adequada."
         assert isinstance(subsection.content[1], PdfPage)
-        assert subsection.content[1].export_mode == "text"
+        assert subsection.content[1].export_mode == "image"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_pdf_plan_sends_scanned_pages_to_visual_text_reconstruction() -> None:
+    pages = [_page(2, "")]
+    plan = PdfStructurePlan(
+        document_title="Manual escaneado",
+        sections=[PdfStructureSection(title="Segurança", page_numbers=[2])],
+        selected_page_numbers=[2],
+    )
+
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        window._pages = pages
+        assert window._build_sections_from_pdf_plan(plan) == 1
+        page = window._sections[0].content[0]
+        assert isinstance(page, PdfPage)
+        assert page.export_mode == "text"
     finally:
         window.close()
         app.processEvents()
@@ -478,6 +519,23 @@ class _StructuredTranslator:
         return "Tensão nominal: 400 V\nCorrente nominal: 16 A\n\n• Desconecte a alimentação."
 
 
+class _GraphicOnlyTranslator:
+    """Translator fixture that classifies a visual-only page as an illustration."""
+
+    supports_page_translation = True
+
+    def translate_page(self, source: Path, target: Path, target_language: str) -> None:
+        target.write_bytes(source.read_bytes())
+
+    def extract_structured_content(
+        self,
+        source: Path,
+        target_language: str,
+        source_text: str = "",
+    ) -> str:
+        return "[[KEEP_AS_IMAGE]]"
+
+
 def test_rmarkdown_formatter_creates_tables_and_normalizes_lists() -> None:
     source = """Tensão nominal: 400 V
 Corrente nominal: 16 A
@@ -526,6 +584,36 @@ def test_text_mode_pdf_page_exports_as_formatted_content() -> None:
     assert "| Tensão nominal | 400 V |" in rmd
     assert "- Desconecte a alimentação." in rmd
     assert "include_graphics('img/technical_page.png')" not in rmd
+
+
+def test_visual_marker_preserves_only_the_graphic_page_as_image() -> None:
+    with TemporaryDirectory() as temporary_directory:
+        root = Path(temporary_directory)
+        source = root / "technical_drawing.png"
+        source.write_bytes(b"copyable-drawing")
+        page = PdfPage(
+            number=1,
+            image_path=source,
+            thumbnail_path=source,
+            extracted_text="",
+            export_mode="text",
+            source_type="pdf",
+        )
+        export = ProjectExportService()
+        export._write_language_project(
+            root / "manual",
+            "Manual de teste",
+            [ManualSection(title="Desenho", content=[page])],
+            "T-003",
+            "2026-08",
+            "pt",
+            translator=_GraphicOnlyTranslator(),
+            translate_images=True,
+        )
+        rmd = (root / "manual" / "manual.rmd").read_text(encoding="utf-8")
+
+    assert "[[KEEP_AS_IMAGE]]" not in rmd
+    assert "knitr::include_graphics('img/" in rmd
 
 
 def test_rmarkdown_formatter_removes_nested_duplicate_headings_and_contact_fragments() -> None:
@@ -578,7 +666,9 @@ def test_image_pages_use_safe_width_and_no_html_tabsets() -> None:
     assert "fig.pos='H'" in rmd
     assert "{.tabset" not in rmd
     assert "\\setmainfont{Gotham Rounded Book}" in rmd
-    assert "\\vspace{4cm}\n\\newpage" in rmd
+    assert "\\vspace{2.2cm}" in rmd
+    assert "\\vspace{4cm}\n\\newpage" not in rmd
+    assert rmd.count("\\newpage") == 1
     assert "library(rsvg)" not in rmd
 
 
@@ -590,6 +680,7 @@ if __name__ == "__main__":
     test_rmarkdown_formatter_removes_ai_metacommentary_from_saved_text_blocks()
     test_rmarkdown_formatter_removes_duplicate_source_chapter_and_preserves_subheading()
     test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line()
+    test_structured_translation_splits_dense_source_text_on_safe_boundaries()
     test_layout_detection_routes_repeated_or_collapsed_pdf_text_to_visual_reading()
     test_text_outline_parser_builds_sections_with_real_page_evidence()
     test_text_outline_parser_rejects_generic_or_unmatched_titles()
@@ -598,11 +689,13 @@ if __name__ == "__main__":
     test_pdf_plan_replaces_generic_ai_intro_with_selected_page_content()
     test_local_grouping_keeps_related_pages_and_uses_source_backed_intro()
     test_empty_pdf_text_explains_that_visual_read_is_required()
-    test_pdf_plan_creates_editable_text_mode_content_in_main_window()
+    test_pdf_plan_classifies_textual_and_graphical_pages_in_main_window()
+    test_pdf_plan_sends_scanned_pages_to_visual_text_reconstruction()
     test_window_reports_missing_pages_from_detected_chapter_coverage()
     test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()
     test_text_mode_pdf_page_exports_as_formatted_content()
+    test_visual_marker_preserves_only_the_graphic_page_as_image()
     test_rmarkdown_formatter_removes_nested_duplicate_headings_and_contact_fragments()
     test_image_pages_use_safe_width_and_no_html_tabsets()
     print("PDF structure tests passed")

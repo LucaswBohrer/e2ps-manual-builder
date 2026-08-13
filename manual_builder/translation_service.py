@@ -213,38 +213,75 @@ class ManusTranslationService:
         """
         target.write_bytes(source.read_bytes())
 
+    @staticmethod
+    def _source_text_chunks(source_text: str, maximum_characters: int = 4200) -> list[str]:
+        """Split dense extracted pages on line boundaries before an AI translation request.
+
+        A page with tables can contain enough extracted characters to exceed Groq's per-request
+        token window when combined with the requested Markdown output.  Smaller independent
+        blocks keep the request reliable and are reassembled in the original reading order.
+        """
+        lines = [line.rstrip() for line in (source_text or "").splitlines()]
+        chunks: list[str] = []
+        current: list[str] = []
+        current_length = 0
+        for line in lines:
+            line_length = len(line) + 1
+            if current and current_length + line_length > maximum_characters:
+                chunks.append("\n".join(current).strip())
+                current = []
+                current_length = 0
+            if line_length > maximum_characters:
+                for start in range(0, len(line), maximum_characters):
+                    if current:
+                        chunks.append("\n".join(current).strip())
+                        current = []
+                        current_length = 0
+                    chunks.append(line[start:start + maximum_characters].strip())
+                continue
+            current.append(line)
+            current_length += line_length
+        if current:
+            chunks.append("\n".join(current).strip())
+        return [chunk for chunk in chunks if chunk]
+
     def _structured_source_completion(self, source_text: str, target_language: str) -> str:
         """Translate extracted HTML or PDF text into clean Markdown without sending an image."""
         if self._client is None or not source_text.strip():
             return ""
 
         lang_name = LANGUAGE_NAMES.get(target_language, target_language)
-        prompt = (
-            "Você é um editor de manuais técnicos industriais. Converta o conteúdo-fonte abaixo "
-            f"integralmente para {lang_name}. Traduza TODOS os títulos, rótulos, descrições e valores "
-            "textuais; preserve códigos, números, unidades e referências técnicas. Quando detectar dados "
-            "de duas ou mais colunas, reconstrua-os como uma tabela Markdown. Preserve listas e a ordem "
-            "do conteúdo. Use parágrafos curtos, listas Markdown para procedimentos ou avisos e tabelas "
-            "Markdown para dados técnicos. Crie cabeçalhos Markdown SOMENTE quando o título estiver "
-            "literalmente visível no conteúdo-fonte; não invente seções como Introdução, Conclusão, "
-            "Descrição do produto ou Contato. Ignore números de página, rodapés, endereços, nomes da "
-            "empresa e linhas de contato. Retorne APENAS o Markdown final, sem explicações, sem bloco "
-            "de código e sem marcadores de raciocínio. Não escreva rótulos como `TEXT:`, `Texto original:`, "
-            "`Tradução:` ou `Resultado:` e não repita o conteúdo de origem antes da versão final. Inicie "
-            "diretamente pelo primeiro título, parágrafo, lista ou tabela do manual.\n\n"
-            f"CONTEÚDO-FONTE EXTRAÍDO:\n{source_text[:18000]}"
-        )
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=3000,
-                timeout=25.0,
+        translated_chunks: list[str] = []
+        for source_chunk in self._source_text_chunks(source_text):
+            prompt = (
+                "Você é um editor de manuais técnicos industriais. Converta o conteúdo-fonte abaixo "
+                f"integralmente para {lang_name}. Traduza TODOS os títulos, rótulos, descrições e valores "
+                "textuais; preserve códigos, números, unidades e referências técnicas. Quando detectar dados "
+                "de duas ou mais colunas, reconstrua-os como uma tabela Markdown. Preserve listas e a ordem "
+                "do conteúdo. Use parágrafos curtos, listas Markdown para procedimentos ou avisos e tabelas "
+                "Markdown para dados técnicos. Crie cabeçalhos Markdown SOMENTE quando o título estiver "
+                "literalmente visível no conteúdo-fonte; não invente seções como Introdução, Conclusão, "
+                "Descrição do produto ou Contato. Ignore números de página, rodapés, endereços, nomes da "
+                "empresa e linhas de contato. Retorne APENAS o Markdown final, sem explicações, sem bloco "
+                "de código e sem marcadores de raciocínio. Não escreva rótulos como `TEXT:`, `Texto original:`, "
+                "`Tradução:` ou `Resultado:` e não repita o conteúdo de origem antes da versão final. Inicie "
+                "diretamente pelo primeiro título, parágrafo, lista ou tabela do manual.\n\n"
+                f"CONTEÚDO-FONTE EXTRAÍDO:\n{source_chunk}"
             )
-            return self._clean_model_output(response.choices[0].message.content)
-        except Exception:
-            return ""
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                    max_tokens=1400,
+                    timeout=25.0,
+                )
+                translated = self._clean_model_output(response.choices[0].message.content)
+                if translated:
+                    translated_chunks.append(translated)
+            except Exception:
+                continue
+        return "\n\n".join(translated_chunks).strip()
 
     @staticmethod
     def _requires_visual_layout_reconstruction(source_text: str) -> bool:
@@ -298,8 +335,10 @@ class ManusTranslationService:
         source_text: str = "",
     ) -> str:
         """Extract and translate content as structured Markdown using HTML source or AI Vision."""
-        source_needs_visual_layout = self._requires_visual_layout_reconstruction(source_text)
-        if source_text.strip() and not source_needs_visual_layout:
+        # A página só deve ir para leitura visual quando não houver texto extraível. Mesmo que
+        # o texto venha de uma tabela ou de colunas, o modo Texto/Tabela precisa tentar a
+        # reconstrução traduzida primeiro; preservar a página inteira em inglês é o último recurso.
+        if source_text.strip():
             structured = self._structured_source_completion(source_text, target_language)
             if structured:
                 return structured
@@ -328,7 +367,10 @@ class ManusTranslationService:
                 "(4) reconstrua tabelas em linhas Markdown completas, com cabeçalho, separador e uma linha por "
                 "registro, jamais em uma única linha; "
                 "(5) não invente nem resuma instruções técnicas; só crie títulos que estejam visíveis na página "
-                "e ignore rodapés, endereços e contatos. "
+                "e ignore rodapés, endereços e contatos; "
+                "(6) se a página for predominantemente um desenho técnico, diagrama, vista explodida, fotografia "
+                "ou painel de símbolos sem procedimento, tabela ou texto explicativo suficiente, retorne "
+                "EXATAMENTE [[KEEP_AS_IMAGE]] e nada mais. "
                 "Retorne somente o Markdown final, sem explicações, comentários, texto-fonte ecoado, rótulos "
                 "como `TEXT:` ou `Tradução:`, nem blocos <think>."
             )

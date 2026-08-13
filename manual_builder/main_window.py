@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from html import escape
 import os
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 try:
@@ -768,8 +769,9 @@ class MainWindow(QMainWindow):
     def _build_sections_from_pdf_plan(self, plan: PdfStructurePlan) -> int:
         """Map an AI-selected PDF plan to editable mixed content blocks.
 
-        Pages are initially set to text/table mode so the export can reconstruct readable
-        technical content. The user may replace them with images or recrops in the editor.
+        Text-heavy pages begin in Text/Table mode and are reconstructed in the target language.
+        Drawings, sparse symbol panels and exploded views remain images. The user may override
+        either decision or insert crops later in the editor.
         """
         from dataclasses import replace
 
@@ -778,6 +780,30 @@ class MainWindow(QMainWindow):
             for page in self._pages
             if page.source_type == "pdf" and page.variant == 1
         }
+
+        def automatic_export_mode(extracted_text: str) -> str:
+            """Choose text only when the page contains enough readable technical prose.
+
+            Sparse pages are commonly warning-symbol panels, assembly drawings, exploded views or
+            dimensional graphics. Their extracted labels are not enough to reproduce the visual
+            meaning, so they remain images. Dense prose, procedures and tabular records are sent
+            to structured translation and become Portuguese Markdown.
+            """
+            normalized = " ".join((extracted_text or "").split())
+            # Um PDF escaneado não fornece texto aqui. Ele deve seguir para a leitura visual
+            # estruturada, que decide se há instruções/tabelas a traduzir ou somente um desenho.
+            if not normalized:
+                return "text"
+            word_count = len(re.findall(r"[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9/-]*", normalized))
+            graphic_markers = (
+                "exploded view", "dimension", "dimensions", "outline drawing", "drawing",
+                "spare parts", "parts list", "pos.", "fig.", "figure ", "diagram",
+            )
+            if any(marker in normalized.lower() for marker in graphic_markers):
+                return "image"
+            if len(normalized) < 520 or word_count < 85:
+                return "image"
+            return "text"
 
         def selected_content(intro: str, page_numbers: list[int]) -> list[PdfPage | str]:
             content: list[PdfPage | str] = []
@@ -790,7 +816,11 @@ class MainWindow(QMainWindow):
                         page_number, page.extracted_text
                     )
                     content.append(
-                        replace(page, export_mode="text", extracted_text=extracted_text)
+                        replace(
+                            page,
+                            export_mode=automatic_export_mode(extracted_text),
+                            extracted_text=extracted_text,
+                        )
                     )
             return content
 
