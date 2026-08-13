@@ -40,14 +40,14 @@ from PySide6.QtWidgets import (
 )
 
 from manual_builder.models import ManualSection, ManualSubsection, PdfPage
-from manual_builder.ai_service import ManualAIService
+from manual_builder.ai_service import ManualAIService, PdfStructurePlan
 from manual_builder.content_editor_dialog import ContentEditorDialog
 from manual_builder.crop_dialog import CropDialog
 from manual_builder.export_worker import MultilingualExportWorker
 from manual_builder.html_service import HtmlStructurePlan
 from manual_builder.project_service import ProjectExportService
 from manual_builder.project_file_service import ProjectFileService
-from manual_builder.workers import HtmlRenderWorker, PdfRenderWorker
+from manual_builder.workers import HtmlRenderWorker, PdfRenderWorker, PdfStructureWorker
 
 
 class MainWindow(QMainWindow):
@@ -63,6 +63,7 @@ class MainWindow(QMainWindow):
         self._temp_dir = TemporaryDirectory(prefix="e2ps_manual_")
         self._render_worker: PdfRenderWorker | None = None
         self._html_render_worker: HtmlRenderWorker | None = None
+        self._pdf_structure_worker: PdfStructureWorker | None = None
         self._export_worker: MultilingualExportWorker | None = None
         self._ai_service = ManualAIService()
         self._cover_image_path: Path | None = None
@@ -635,6 +636,125 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage(f"Carregadas {len(pages)} página(s) do manual.")
 
+        if any(page.source_type == "pdf" and page.variant == 1 for page in pages):
+            self._start_pdf_structure_analysis()
+
+    def _start_pdf_structure_analysis(self) -> None:
+        """Analyze a manufacturer PDF after rendering and create a compact E2PS outline."""
+        pdf_pages = [
+            page for page in self._pages
+            if page.source_type == "pdf" and page.variant == 1
+        ]
+        if not pdf_pages:
+            return
+        self._pdf_structure_worker = PdfStructureWorker(
+            pdf_pages,
+            self.title_input.text().strip(),
+            self.api_key_input.text().strip(),
+            self.base_url_input.text().strip(),
+            self.model_input.text().strip() or "llama-3.3-70b-versatile",
+        )
+        self._pdf_structure_worker.completed.connect(self._pdf_structure_completed)
+        self._pdf_structure_worker.failed.connect(self._pdf_structure_failed)
+        self._pdf_structure_worker.start()
+        self.statusBar().showMessage(
+            "A IA está selecionando somente o conteúdo essencial do PDF para o manual E2PS…"
+        )
+
+    def _pdf_structure_completed(self, plan: PdfStructurePlan) -> None:
+        """Convert the selected PDF outline into the same editable section models used by HTML."""
+        if not plan.sections:
+            message = plan.note or "Não foi possível identificar conteúdo técnico suficiente no PDF."
+            self.chat_display.append(
+                "<br><b>🤖 Análise automática do PDF:</b><br>" + escape(message)
+            )
+            self.statusBar().showMessage(message, 9000)
+            return
+
+        created_sections = self._build_sections_from_pdf_plan(plan)
+        default_title = "E2PS Technical Manual"
+        if plan.document_title.strip() and (
+            not self.title_input.text().strip()
+            or self.title_input.text().strip() == default_title
+        ):
+            self.title_input.setText(plan.document_title.strip())
+        self._refresh_sections()
+        self.export_button.setEnabled(bool(self._sections))
+
+        selected_count = len(plan.selected_page_numbers)
+        omitted_count = len(plan.omitted_page_numbers)
+        mode = "IA" if plan.used_ai else "análise local"
+        summary = (
+            f"Foram criadas {created_sections} seção(ões) editáveis com {selected_count} página(s) "
+            f"técnicas selecionadas pela {mode}. {omitted_count} página(s) de capa, referência, "
+            "marketing, duplicidade ou conteúdo não operacional foram deixadas de fora."
+        )
+        if plan.note:
+            summary += " " + plan.note
+        self.chat_display.append(
+            "<br><b>🤖 Estrutura enxuta do PDF criada:</b><br>" + escape(summary)
+        )
+        self.statusBar().showMessage(summary, 12000)
+
+    def _pdf_structure_failed(self, error: str) -> None:
+        """Keep rendered pages available when background PDF analysis cannot run."""
+        message = (
+            "As páginas foram carregadas, mas a estrutura automática do PDF não pôde ser criada: "
+            f"{error}"
+        )
+        self.chat_display.append(
+            "<br><b>🤖 Análise automática do PDF:</b><br>" + escape(message)
+        )
+        self.statusBar().showMessage(message, 10000)
+
+    def _build_sections_from_pdf_plan(self, plan: PdfStructurePlan) -> int:
+        """Map an AI-selected PDF plan to editable mixed content blocks.
+
+        Pages are initially set to text/table mode so the export can reconstruct readable
+        technical content. The user may replace them with images or recrops in the editor.
+        """
+        from dataclasses import replace
+
+        available_pages = {
+            page.number: page
+            for page in self._pages
+            if page.source_type == "pdf" and page.variant == 1
+        }
+
+        def selected_content(intro: str, page_numbers: list[int]) -> list[PdfPage | str]:
+            content: list[PdfPage | str] = []
+            if intro.strip():
+                content.append(intro.strip())
+            for page_number in page_numbers:
+                page = available_pages.get(page_number)
+                if page is not None:
+                    content.append(replace(page, export_mode="text"))
+            return content
+
+        self._sections.clear()
+        for outline_section in plan.sections:
+            subsections = [
+                ManualSubsection(
+                    title=outline_subsection.title,
+                    content=selected_content(
+                        outline_subsection.intro,
+                        outline_subsection.page_numbers,
+                    ),
+                )
+                for outline_subsection in outline_section.subsections
+            ]
+            self._sections.append(
+                ManualSection(
+                    title=outline_section.title,
+                    content=selected_content(
+                        outline_section.intro,
+                        outline_section.page_numbers,
+                    ),
+                    subsections=subsections,
+                )
+            )
+        return len(self._sections)
+
     def _html_rendering_completed(
         self,
         pages: list[PdfPage],
@@ -798,6 +918,20 @@ class MainWindow(QMainWindow):
                 self._pages[i] = new_page
                 break
         
+        # Atualizar as referências já inseridas nas seções, inclusive as criadas automaticamente.
+        for section in self._sections:
+            section.content = [
+                new_page if isinstance(content, PdfPage) and content.number == page.number
+                and content.variant == page.variant else content
+                for content in section.content
+            ]
+            for subsection in section.subsections:
+                subsection.content = [
+                    new_page if isinstance(content, PdfPage) and content.number == page.number
+                    and content.variant == page.variant else content
+                    for content in subsection.content
+                ]
+
         # Atualizar o item da lista
         item.setData(Qt.ItemDataRole.UserRole, new_page)
         self.statusBar().showMessage(f"Página {page.number} configurada para exportação como {new_mode}.")

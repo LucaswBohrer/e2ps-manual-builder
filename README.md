@@ -29,6 +29,7 @@ O **E2PS Manual Builder** é uma aplicação desktop criada para acelerar a prep
 | Recurso | O que você pode fazer |
 |:--|:--|
 | 📄 **PDFs, imagens e HTML** | Abrir um PDF, importar várias imagens ou carregar um manual HTML/HTM diretamente para a montagem do manual. |
+| 🧠 **Estrutura automática de PDF** | Selecionar o conteúdo técnico essencial do PDF e criar seções/subseções editáveis sem copiar todo o catálogo do fabricante. |
 | ✂️ **Recortes ilimitados** | Criar mais de um recorte da mesma página e utilizar cada variante como um item independente. |
 | 🧱 **Seções flexíveis** | Criar, renomear e editar seções e subseções depois de iniciadas. |
 | ✍️ **Texto entre imagens** | Inserir explicações antes, entre ou após qualquer imagem de uma seção. |
@@ -110,7 +111,7 @@ Use **Open PDF** para abrir documentos PDF, **Open Images** para importar imagen
 
 | Tipo de origem | O que o aplicativo aproveita |
 |:--|:--|
-| 📄 **PDF** | Renderiza páginas, extrai o texto incorporado quando disponível e permite recortes. |
+| 📄 **PDF** | Renderiza páginas, extrai o texto incorporado quando disponível, permite recortes e cria uma estrutura inicial enxuta com conteúdo técnico selecionado. |
 | 🖼️ **Imagens** | Importa vários arquivos de uma vez, cria miniaturas e permite recortes. |
 | 🌐 **HTML/HTM** | Renderiza o conteúdo visual em páginas para seleção/recorte, lê a hierarquia de cabeçalhos para criar seções e subseções editáveis e extrai o texto-fonte para a IA e a exportação em Texto/Tabela. |
 
@@ -123,6 +124,8 @@ Selecione uma página e use a ferramenta de recorte. Você pode criar várias va
 ### 🧩 3. Estruture o manual
 
 Crie seções e subseções na árvore de conteúdo. Elas continuam editáveis após a criação: renomeie títulos, adicione ou remova subseções, inclua blocos de texto e ajuste o manual conforme a necessidade técnica.
+
+Ao usar **Open PDF**, a aplicação analisa o texto extraído em segundo plano e cria uma proposta inicial de estrutura. Ela prioriza segurança, instalação, operação, manutenção, solução de problemas e dados técnicos; páginas de índice, capa, marketing, referências ou duplicadas são deixadas de fora quando identificadas. A proposta não é uma cópia integral do manual do fabricante: cada seção e cada página criada podem ser ajustadas ou removidas no **Editar conteúdo** antes da exportação.
 
 Clique com o **botão direito** sobre uma seção ou subseção para abrir o menu de contexto. Por ele, é possível **editar o conteúdo**, renomear o título, excluir o item ou movê-lo para cima/baixo na ordem do manual. As subseções são movidas somente dentro da seção à qual pertencem, preservando a hierarquia do documento.
 
@@ -154,7 +157,7 @@ Antes de fechar o aplicativo — e ao concluir cada etapa importante — use **S
 
 ### 💬 Assistente de IA
 
-O painel de IA permite fazer perguntas sobre o manual, solicitar textos técnicos de apoio e obter sugestões de como distribuir as páginas entre seções e subseções. A sugestão serve como orientação; ela **não altera automaticamente** a estrutura do manual, deixando a decisão final com você.
+O painel de IA permite fazer perguntas sobre o manual, solicitar textos técnicos de apoio e obter sugestões de como distribuir as páginas entre seções e subseções. Ao importar um **PDF**, a análise automática cria uma estrutura inicial enxuta; o comando **Suggest Structure** continua sendo apenas uma sugestão no painel, sem alterar a estrutura atual. Em ambos os casos, a decisão final permanece com você, pois todos os itens podem ser editados antes da exportação.
 
 ### ☁️ Configuração com GroqCloud
 
@@ -173,7 +176,7 @@ Depois de configurar, utilize **Salvar Configs**. A API Key, a URL-base e o mode
 | Modo | Indicado para | Resultado |
 |:--|:--|:--|
 | 🖼️ **Imagem** | Diagramas, símbolos, certificados, desenhos ou páginas cuja aparência precisa ser preservada. | Copia a imagem original para o projeto sem inserir texto bruto da IA sobre a figura. |
-| 📊 **Texto/Tabela (OCR)** | Especificações, tabelas técnicas, listas de parâmetros, avisos e páginas com muito texto. | Solicita extração estruturada e tradução para gerar texto e tabelas editáveis no R Markdown. Para páginas HTML, prioriza o texto-fonte extraído antes de recorrer à leitura visual. |
+| 📊 **Texto/Tabela (OCR)** | Especificações, tabelas técnicas, listas de parâmetros, avisos e páginas com muito texto. | Solicita extração estruturada e tradução para gerar texto e tabelas editáveis no R Markdown. Para páginas HTML e PDFs com texto extraível, prioriza o texto-fonte antes de recorrer à leitura visual. |
 
 Para tabelas técnicas que precisam sair em português de forma legível, priorize **Texto/Tabela (OCR)**. Revise sempre números, unidades, referências normativas, símbolos e valores críticos antes de publicar um manual oficial.
 
@@ -209,7 +212,7 @@ O formato **`.e2ps`** é o arquivo de projeto oficial do E2PS Manual Builder. El
 
 ## 📦 Exportação em R Markdown e PDF
 
-A exportação gera uma pasta organizada por idioma com o arquivo `.Rmd`, imagens e outros ativos necessários para a compilação do manual. A interface permite selecionar **Português**, **Inglês** e **Espanhol** conforme a necessidade do projeto.
+A exportação gera uma pasta organizada por idioma com o arquivo `.Rmd`, imagens e outros ativos necessários para a compilação do manual. A interface permite selecionar **Português**, **Inglês** e **Espanhol** conforme a necessidade do projeto. Páginas escolhidas em **Texto/Tabela (OCR)** são convertidas em Markdown técnico: blocos de dados `rótulo: valor` são organizados como tabelas e marcadores são normalizados como listas, preservando uma leitura mais limpa após o *knit* para PDF.
 
 Para renderizar o PDF, abra o arquivo `.Rmd` em um ambiente com R Markdown configurado, como o RStudio, e execute:
 

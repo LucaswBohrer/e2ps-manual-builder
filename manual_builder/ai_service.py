@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import math
 import os
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 try:
@@ -11,6 +15,37 @@ except ImportError:
     OpenAI = None
 
 from manual_builder.models import PdfPage
+
+
+@dataclass(slots=True)
+class PdfStructureSubsection:
+    """A selected subset of PDF pages that forms an editable manual subsection."""
+
+    title: str
+    page_numbers: list[int] = field(default_factory=list)
+    intro: str = ""
+
+
+@dataclass(slots=True)
+class PdfStructureSection:
+    """A selected subset of PDF pages that forms an editable manual section."""
+
+    title: str
+    page_numbers: list[int] = field(default_factory=list)
+    intro: str = ""
+    subsections: list[PdfStructureSubsection] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class PdfStructurePlan:
+    """Compact, editable E2PS outline inferred from a manufacturer PDF."""
+
+    document_title: str = ""
+    sections: list[PdfStructureSection] = field(default_factory=list)
+    selected_page_numbers: list[int] = field(default_factory=list)
+    omitted_page_numbers: list[int] = field(default_factory=list)
+    used_ai: bool = False
+    note: str = ""
 
 
 class ManualAIService:
@@ -117,6 +152,260 @@ class ManualAIService:
             return response.choices[0].message.content.strip()
         except Exception as error:
             return f"Erro ao gerar sugestão de estrutura ({self._model}): {error}"
+
+    def create_pdf_structure(self, pages: list[PdfPage], manual_title: str) -> PdfStructurePlan:
+        """Create a compact E2PS outline, selecting only useful manufacturer-PDF content.
+
+        The model receives bounded, page-numbered extracted text and is explicitly instructed to
+        discard commercial, legal and duplicate material. When an API is unavailable or responds
+        with malformed data, a conservative local classification still produces an editable plan.
+        """
+        source_pages = sorted(
+            (page for page in pages if page.variant == 1 and page.source_type == "pdf"),
+            key=lambda page: page.number,
+        )
+        if not source_pages:
+            return PdfStructurePlan(
+                document_title=manual_title.strip(),
+                note="Não há páginas de PDF disponíveis para análise automática.",
+            )
+
+        fallback = self._fallback_pdf_structure(source_pages, manual_title)
+        if self._client is None:
+            fallback.note = (
+                "Estrutura preliminar criada pela análise local. Configure a IA para uma seleção "
+                "mais precisa do conteúdo essencial."
+            )
+            return fallback
+
+        context = self._pdf_page_context(source_pages)
+        prompt = (
+            "Você é um especialista em documentação técnica industrial da E2PS. A partir das páginas "
+            "extraídas abaixo, crie SOMENTE o conteúdo essencial para um manual E2PS enxuto. Não copie "
+            "nem organize todo o manual do fabricante. Descarte capa, índice, marketing, certificados, "
+            "declarações legais, revisões, páginas repetidas e material de referência não operacional. "
+            "Priorize segurança, instalação/comissionamento, operação, manutenção/diagnóstico e dados "
+            "técnicos indispensáveis. Se uma categoria não estiver presente, não a invente.\n\n"
+            "Retorne APENAS JSON válido, sem Markdown, neste formato:\n"
+            '{"document_title":"...","sections":[{"title":"...","intro":"máximo duas frases em português baseadas no texto","pages":[1],"subsections":[{"title":"...","intro":"...","pages":[2]}]}]}\n\n'
+            "Regras obrigatórias: no máximo 8 seções; cada página aparece no máximo uma vez; escolha "
+            "apenas páginas realmente necessárias; use somente números das páginas fornecidas; textos "
+            "de introdução não podem criar especificações não existentes.\n\n"
+            f"Título informado: {manual_title or 'Manual técnico'}\n\nPáginas extraídas:\n{context}"
+        )
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Return strict JSON only. Never include reasoning, commentary or code fences.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                max_tokens=1800,
+            )
+            raw = response.choices[0].message.content or ""
+            plan = self._parse_pdf_structure(raw, source_pages, manual_title)
+            if plan.sections:
+                plan.used_ai = True
+                plan.note = "Estrutura enxuta criada pela IA a partir do conteúdo extraído do PDF."
+                return plan
+        except Exception as error:
+            fallback.note = (
+                "A IA não pôde concluir a análise; foi criada uma seleção local editável. "
+                f"Detalhe: {error}"
+            )
+            return fallback
+
+        fallback.note = (
+            "A resposta da IA não continha uma estrutura válida; foi criada uma seleção local editável."
+        )
+        return fallback
+
+    @staticmethod
+    def _clean_model_output(value: str) -> str:
+        """Strip common reasoning wrappers and Markdown fences before JSON decoding."""
+        cleaned = re.sub(r"<think>.*?</think>", "", value, flags=re.IGNORECASE | re.DOTALL).strip()
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE).strip()
+        start, end = cleaned.find("{"), cleaned.rfind("}")
+        return cleaned[start:end + 1] if start >= 0 and end >= start else cleaned
+
+    @staticmethod
+    def _compact_text(value: object, limit: int = 360) -> str:
+        text = re.sub(r"\s+", " ", str(value or "")).strip()
+        return text[:limit].rstrip()
+
+    def _pdf_page_context(self, pages: list[PdfPage]) -> str:
+        """Build a bounded context that fits free-tier TPM limits while retaining page coverage."""
+        snippets: list[str] = []
+        for page in pages[:60]:
+            excerpt = self._compact_text(page.extracted_text, 260)
+            if excerpt:
+                snippets.append(f"PÁGINA {page.number}: {excerpt}")
+        context = "\n".join(snippets)
+        return context[:16000]
+
+    def _parse_pdf_structure(
+        self,
+        raw: str,
+        pages: list[PdfPage],
+        manual_title: str,
+    ) -> PdfStructurePlan:
+        """Validate model JSON and convert it to a safe, de-duplicated page plan."""
+        payload = json.loads(self._clean_model_output(raw))
+        available = {page.number for page in pages}
+        used: set[int] = set()
+        sections: list[PdfStructureSection] = []
+        raw_sections = payload.get("sections", []) if isinstance(payload, dict) else []
+        if not isinstance(raw_sections, list):
+            return PdfStructurePlan()
+
+        for raw_section in raw_sections[:8]:
+            if not isinstance(raw_section, dict):
+                continue
+            title = self._compact_text(raw_section.get("title"), 90)
+            if not title:
+                continue
+            direct_pages = self._valid_unused_pages(raw_section.get("pages"), available, used)
+            subsections: list[PdfStructureSubsection] = []
+            raw_subsections = raw_section.get("subsections", [])
+            if isinstance(raw_subsections, list):
+                for raw_subsection in raw_subsections[:8]:
+                    if not isinstance(raw_subsection, dict):
+                        continue
+                    subsection_title = self._compact_text(raw_subsection.get("title"), 90)
+                    subsection_pages = self._valid_unused_pages(
+                        raw_subsection.get("pages"), available, used
+                    )
+                    if subsection_title and subsection_pages:
+                        subsections.append(
+                            PdfStructureSubsection(
+                                title=subsection_title,
+                                page_numbers=subsection_pages,
+                                intro=self._compact_text(raw_subsection.get("intro"), 500),
+                            )
+                        )
+            if direct_pages or subsections:
+                sections.append(
+                    PdfStructureSection(
+                        title=title,
+                        page_numbers=direct_pages,
+                        intro=self._compact_text(raw_section.get("intro"), 500),
+                        subsections=subsections,
+                    )
+                )
+
+        selected = sorted(used)
+        title = self._compact_text(
+            payload.get("document_title") if isinstance(payload, dict) else manual_title,
+            140,
+        ) or manual_title.strip()
+        return PdfStructurePlan(
+            document_title=title,
+            sections=sections,
+            selected_page_numbers=selected,
+            omitted_page_numbers=sorted(available - set(selected)),
+        )
+
+    @staticmethod
+    def _valid_unused_pages(value: object, available: set[int], used: set[int]) -> list[int]:
+        """Keep only valid numeric page references and place each page once."""
+        if not isinstance(value, list):
+            return []
+        selected: list[int] = []
+        for page_number in value:
+            try:
+                normalized = int(page_number)
+            except (TypeError, ValueError):
+                continue
+            if normalized in available and normalized not in used:
+                used.add(normalized)
+                selected.append(normalized)
+        return selected
+
+    def _fallback_pdf_structure(
+        self, pages: list[PdfPage], manual_title: str
+    ) -> PdfStructurePlan:
+        """Create a conservative local selection when AI is unavailable.
+
+        This deliberately limits the result instead of reproducing the manufacturer manual.
+        """
+        categories = [
+            ("Segurança", ("safety", "segurança", "danger", "warning", "caution", "aviso")),
+            ("Instalação e comissionamento", ("installation", "instala", "mounting", "wiring", "commission")),
+            ("Operação", ("operation", "operaç", "operating", "uso", "start", "controle")),
+            ("Dados técnicos", ("technical data", "dados técnicos", "specification", "rating", "tensão", "current")),
+            ("Manutenção e diagnóstico", ("maintenance", "manuten", "troubleshoot", "falha", "fault", "diagnostic")),
+        ]
+        excluded_terms = (
+            "table of contents", "índice", "copyright", "all rights reserved", "declaration",
+            "certificate", "certificado", "revision history", "histórico de revisão",
+        )
+        total = len(pages)
+        selection_limit = min(total, max(6, min(24, math.ceil(total * 0.60))))
+        buckets: dict[str, list[int]] = {title: [] for title, _terms in categories}
+        remaining: list[int] = []
+
+        for page in pages:
+            text = self._compact_text(page.extracted_text, 900).lower()
+            if not text or any(term in text for term in excluded_terms):
+                continue
+            matched = False
+            for title, terms in categories:
+                if any(term in text for term in terms):
+                    buckets[title].append(page.number)
+                    matched = True
+                    break
+            if not matched and len(text) >= 80:
+                remaining.append(page.number)
+
+        selected: list[int] = []
+        sections: list[PdfStructureSection] = []
+        for title, _terms in categories:
+            page_numbers = [number for number in buckets[title] if number not in selected]
+            if page_numbers:
+                allowed = page_numbers[: max(0, selection_limit - len(selected))]
+                if allowed:
+                    selected.extend(allowed)
+                    sections.append(
+                        PdfStructureSection(
+                            title=title,
+                            page_numbers=allowed,
+                            intro="Conteúdo técnico selecionado para esta etapa do manual.",
+                        )
+                    )
+        if len(selected) < selection_limit:
+            allowed = [number for number in remaining if number not in selected][
+                : selection_limit - len(selected)
+            ]
+            if allowed:
+                selected.extend(allowed)
+                sections.append(
+                    PdfStructureSection(
+                        title="Informações técnicas essenciais",
+                        page_numbers=allowed,
+                        intro="Informações operacionais e técnicas relevantes selecionadas do fabricante.",
+                    )
+                )
+        if not sections and pages:
+            selected = [page.number for page in pages[:selection_limit] if page.extracted_text.strip()]
+            if selected:
+                sections.append(
+                    PdfStructureSection(
+                        title="Conteúdo técnico selecionado",
+                        page_numbers=selected,
+                        intro="Páginas técnicas selecionadas para revisão e organização no manual E2PS.",
+                    )
+                )
+        available = {page.number for page in pages}
+        return PdfStructurePlan(
+            document_title=manual_title.strip(),
+            sections=sections,
+            selected_page_numbers=sorted(selected),
+            omitted_page_numbers=sorted(available - set(selected)),
+        )
 
     def generate_section_text(self, section_title: str, context_topic: str) -> str:
         """Generate professional technical descriptive text for a manual section using AI."""

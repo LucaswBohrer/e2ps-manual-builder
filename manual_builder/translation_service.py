@@ -167,7 +167,7 @@ class ManusTranslationService:
         target.write_bytes(source.read_bytes())
 
     def _structured_source_completion(self, source_text: str, target_language: str) -> str:
-        """Translate extracted HTML text into clean Markdown without sending an image."""
+        """Translate extracted HTML or PDF text into clean Markdown without sending an image."""
         if self._client is None or not source_text.strip():
             return ""
 
@@ -177,9 +177,10 @@ class ManusTranslationService:
             f"integralmente para {lang_name}. Traduza TODOS os títulos, rótulos, descrições e valores "
             "textuais; preserve códigos, números, unidades e referências técnicas. Quando detectar dados "
             "de duas ou mais colunas, reconstrua-os como uma tabela Markdown. Preserve listas e a ordem "
-            "do conteúdo. Retorne APENAS o Markdown final, sem explicações, sem bloco de código e sem "
-            "marcadores de raciocínio.\n\n"
-            f"CONTEÚDO-FONTE HTML:\n{source_text[:18000]}"
+            "do conteúdo. Use parágrafos curtos, listas Markdown para procedimentos ou avisos e tabelas "
+            "Markdown para dados técnicos. Retorne APENAS o Markdown final, sem explicações, sem bloco "
+            "de código e sem marcadores de raciocínio.\n\n"
+            f"CONTEÚDO-FONTE EXTRAÍDO:\n{source_text[:18000]}"
         )
         try:
             response = self._client.chat.completions.create(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from datetime import date
 from pathlib import Path
@@ -26,6 +27,10 @@ header-includes:
   - \usepackage{{longtable}}
   - \usepackage{{booktabs}}
   - \usepackage{{array}}
+  - \usepackage{{enumitem}}
+  - \setlist{{nosep,leftmargin=*}}
+  - \renewcommand{{\arraystretch}}{{1.15}}
+  - \setlength{{\tabcolsep}}{{5pt}}
   - \allsectionsfont{{\color{{orange}}}}
   - \usepackage{{fancyhdr}}
   - \pagestyle{{fancy}}
@@ -174,6 +179,16 @@ class ProjectExportService:
         """Create independent language folders and translate non-source pages with AI."""
         project_dir = destination / self._safe_name(title)
         requires_translation = any(lang != source_language for lang in languages)
+        requires_structured_content = any(
+            isinstance(item, PdfPage) and getattr(item, "export_mode", "image") == "text"
+            for section in sections
+            for item in (
+                list(section.content)
+                + [sub_item for subsection in section.subsections for sub_item in subsection.content]
+            )
+        )
+        # A mesma IA também é necessária na língua de origem quando há páginas em modo
+        # Texto/Tabela: ela transforma o texto extraído do PDF em Markdown técnico legível.
         translator = (
             create_translation_service(
                 translation_provider,
@@ -182,7 +197,7 @@ class ProjectExportService:
                 source_language,
                 model=model,
             )
-            if requires_translation
+            if requires_translation or requires_structured_content
             else None
         )
         total_pages = sum(
@@ -242,7 +257,8 @@ class ProjectExportService:
                 publication_date,
                 language,
                 translator,
-                language != source_language and translator.supports_page_translation
+                (language != source_language or requires_structured_content)
+                and translator.supports_page_translation
                 if translator is not None
                 else False,
                 page_exported,
@@ -329,7 +345,7 @@ class ProjectExportService:
         for item in content_items:
             if isinstance(item, str):
                 if item.strip():
-                    rendered_blocks.append(item)
+                    rendered_blocks.append(self._format_rmd_text(item))
             elif isinstance(item, PdfPage):
                 page_counter += 1
 
@@ -348,11 +364,11 @@ class ProjectExportService:
                     structured_text = translator.extract_structured_content(
                         item.image_path,
                         language,
-                        item.extracted_text if item.source_type == "html" else "",
+                        item.extracted_text,
                     )
 
                 if structured_text.strip():
-                    rendered_blocks.append(structured_text)
+                    rendered_blocks.append(self._format_rmd_text(structured_text))
                 else:
                     # Para o modo de imagem, sobrescrever a cópia inicial pelo resultado
                     # visual traduzido. No fallback do modo texto, manter a imagem original.
@@ -374,6 +390,67 @@ class ProjectExportService:
                     on_page_exported()
                     
         return "\n\n".join(rendered_blocks)
+
+    @staticmethod
+    def _format_rmd_text(value: str) -> str:
+        """Normalize human/AI text into safe, readable R Markdown.
+
+        Existing Markdown tables and ordered lists are preserved. Plain bullet markers are
+        normalized, and short consecutive ``rótulo: valor`` lines become a table so technical
+        data remains legible after knitting to PDF.
+        """
+        text = value.replace("\r\n", "\n").replace("\r", "\n").strip()
+        text = re.sub(r"^```(?:markdown|md)?\s*|\s*```$", "", text, flags=re.IGNORECASE).strip()
+        if not text:
+            return ""
+
+        lines = [line.rstrip() for line in text.split("\n")]
+        normalized: list[str] = []
+        index = 0
+        while index < len(lines):
+            line = lines[index].strip()
+            if not line:
+                normalized.append("")
+                index += 1
+                continue
+
+            # Convert a short run of technical label/value pairs into a Pandoc table.
+            pair_rows: list[tuple[str, str]] = []
+            cursor = index
+            while cursor < len(lines):
+                candidate = lines[cursor].strip()
+                if (
+                    not candidate
+                    or candidate.startswith(("#", "- ", "* ", "+ ", "|"))
+                    or re.match(r"^\d+[.)]\s+", candidate)
+                    or candidate.count(":") != 1
+                ):
+                    break
+                label, description = (part.strip() for part in candidate.split(":", 1))
+                if not label or not description or len(label) > 48:
+                    break
+                pair_rows.append((label, description))
+                cursor += 1
+            if len(pair_rows) >= 2:
+                normalized.extend(["| Item | Descrição |", "|:--|:--|"])
+                for label, description in pair_rows:
+                    safe_label = label.replace("|", r"\|")
+                    safe_description = description.replace("|", r"\|")
+                    normalized.append(f"| {safe_label} | {safe_description} |")
+                normalized.append("")
+                index = cursor
+                continue
+
+            line = re.sub(r"^[•‣▪◦]\s*", "- ", line)
+            line = re.sub(r"^\*\s+", "- ", line)
+            line = re.sub(r"^(\d+)\)\s+", r"\1. ", line)
+            normalized.append(line)
+            index += 1
+
+        # Remove repeated blank lines that create oversized gaps in the final PDF.
+        rendered = "\n".join(normalized)
+        rendered = re.sub(r"\n{3,}", "\n\n", rendered)
+        return rendered.strip()
 
     def _copy_standard_assets(self, project_dir: Path, cover_image_path: Path | None = None) -> None:
         """Copy logo, typography and cover image shipped with the E2PS standard package."""
