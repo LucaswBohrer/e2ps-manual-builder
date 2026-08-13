@@ -782,27 +782,15 @@ class MainWindow(QMainWindow):
         }
 
         def automatic_export_mode(extracted_text: str) -> str:
-            """Choose text only when the page contains enough readable technical prose.
+            """Start every automatically selected PDF page in Text/Table mode.
 
-            Sparse pages are commonly warning-symbol panels, assembly drawings, exploded views or
-            dimensional graphics. Their extracted labels are not enough to reproduce the visual
-            meaning, so they remain images. Dense prose, procedures and tabular records are sent
-            to structured translation and become Portuguese Markdown.
+            A page title, a short warning, an OCR fragment or an extracted-parts label is not
+            enough evidence to decide that a page is a drawing.  The former character/word
+            thresholds therefore sent real procedures to the raw-English image fallback.  The
+            export-time visual reader now makes the final decision: it returns
+            ``[[KEEP_AS_IMAGE]]`` only for a genuine illustration, exploded view or diagram.
             """
-            normalized = " ".join((extracted_text or "").split())
-            # Um PDF escaneado não fornece texto aqui. Ele deve seguir para a leitura visual
-            # estruturada, que decide se há instruções/tabelas a traduzir ou somente um desenho.
-            if not normalized:
-                return "text"
-            word_count = len(re.findall(r"[A-Za-zÀ-ÿ0-9][A-Za-zÀ-ÿ0-9/-]*", normalized))
-            graphic_markers = (
-                "exploded view", "dimension", "dimensions", "outline drawing", "drawing",
-                "spare parts", "parts list", "pos.", "fig.", "figure ", "diagram",
-            )
-            if any(marker in normalized.lower() for marker in graphic_markers):
-                return "image"
-            if len(normalized) < 520 or word_count < 85:
-                return "image"
+            _ = extracted_text
             return "text"
 
         def selected_content(intro: str, page_numbers: list[int]) -> list[PdfPage | str]:

@@ -11,6 +11,7 @@ from typing import Callable
 
 from manual_builder.models import ManualSection, ManualSubsection, PdfPage
 from manual_builder.translation_service import (
+    TranslationError,
     TranslationService,
     create_translation_service,
 )
@@ -353,18 +354,28 @@ class ProjectExportService:
                 target = image_dir / item.filename
                 shutil.copy2(item.image_path, target)
 
-                # Decidir entre exportar como imagem traduzida ou texto estruturado (OCR/IA)
+                # Páginas textuais não podem degradar silenciosamente para a imagem original.
+                # A leitura visual devolve [[KEEP_AS_IMAGE]] somente quando confirmou que o
+                # conteúdo é uma ilustração técnica sem texto essencial.
                 structured_text = ""
                 export_mode = getattr(item, "export_mode", "image")
-                if translate_images and translator is not None and export_mode == "text":
-                    # Extrair conteúdo estruturado (tabelas e texto) usando IA.
-                    # Se o provedor não retornar conteúdo, preservar a página como imagem,
-                    # nunca gravar o erro da API no PDF final.
+                if export_mode == "text":
+                    if not translate_images or translator is None:
+                        raise TranslationError(
+                            f"Não foi possível extrair o texto da página {item.number}: "
+                            "configure uma chave GroqCloud válida e tente exportar novamente."
+                        )
                     structured_text = translator.extract_structured_content(
                         item.image_path,
                         language,
                         item.extracted_text,
                     )
+                    if not structured_text.strip():
+                        raise TranslationError(
+                            f"Não foi possível extrair o texto da página {item.number}. "
+                            "A exportação foi interrompida para não incluir esta página em inglês como imagem. "
+                            "Verifique a conexão/modelo de visão GroqCloud e tente novamente."
+                        )
 
                 keep_as_image = structured_text.strip() == "[[KEEP_AS_IMAGE]]"
                 if structured_text.strip() and not keep_as_image:
@@ -372,15 +383,13 @@ class ProjectExportService:
                         self._format_rmd_text(structured_text, context_title=content_title)
                     )
                 else:
-                    # Para o modo de imagem, sobrescrever a cópia inicial pelo resultado
-                    # visual traduzido. No fallback do modo texto, manter a imagem original.
                     if (
                         translate_images
                         and translator is not None
                         and export_mode == "image"
                     ):
                         translator.translate_page(item.image_path, target, language)
-                    
+
                     rendered_blocks.append(
                         "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
                         "fig.align='center', out.width='94%%', fig.pos='H'}\n"

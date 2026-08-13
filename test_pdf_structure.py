@@ -15,7 +15,7 @@ from manual_builder.ai_service import (
 from manual_builder.main_window import MainWindow
 from manual_builder.models import ManualSection, PdfPage
 from manual_builder.project_service import ProjectExportService
-from manual_builder.translation_service import ManusTranslationService
+from manual_builder.translation_service import ManusTranslationService, TranslationError
 from manual_builder.workers import PdfStructureWorker
 
 
@@ -309,7 +309,9 @@ def test_pdf_plan_classifies_textual_and_graphical_pages_in_main_window() -> Non
         assert section.content[1].export_mode == "text"
         assert subsection.content[0] == "Fixe o equipamento em superfície adequada."
         assert isinstance(subsection.content[1], PdfPage)
-        assert subsection.content[1].export_mode == "image"
+        # A decisão final de preservar uma ilustração é da leitura visual na exportação.
+        # Um rótulo curto como "Figure" não pode rebaixar uma página técnica para imagem.
+        assert subsection.content[1].export_mode == "text"
     finally:
         window.close()
         app.processEvents()
@@ -519,6 +521,23 @@ class _StructuredTranslator:
         return "Tensão nominal: 400 V\nCorrente nominal: 16 A\n\n• Desconecte a alimentação."
 
 
+class _EmptyStructuredTranslator:
+    """Translator fixture that simulates a failed textual extraction."""
+
+    supports_page_translation = True
+
+    def translate_page(self, source: Path, target: Path, target_language: str) -> None:
+        target.write_bytes(source.read_bytes())
+
+    def extract_structured_content(
+        self,
+        source: Path,
+        target_language: str,
+        source_text: str = "",
+    ) -> str:
+        return ""
+
+
 class _GraphicOnlyTranslator:
     """Translator fixture that classifies a visual-only page as an illustration."""
 
@@ -584,6 +603,36 @@ def test_text_mode_pdf_page_exports_as_formatted_content() -> None:
     assert "| Tensão nominal | 400 V |" in rmd
     assert "- Desconecte a alimentação." in rmd
     assert "include_graphics('img/technical_page.png')" not in rmd
+
+
+def test_text_mode_page_never_falls_back_to_an_english_image() -> None:
+    with TemporaryDirectory() as temporary_directory:
+        root = Path(temporary_directory)
+        source = root / "textual_page.png"
+        source.write_bytes(b"copyable-text-page")
+        page = PdfPage(
+            number=9,
+            image_path=source,
+            thumbnail_path=source,
+            extracted_text="Safety procedure",
+            export_mode="text",
+            source_type="pdf",
+        )
+        try:
+            ProjectExportService()._write_language_project(
+                root / "manual",
+                "Manual de teste",
+                [ManualSection(title="Segurança", content=[page])],
+                "T-004",
+                "2026-08",
+                "pt",
+                translator=_EmptyStructuredTranslator(),
+                translate_images=True,
+            )
+            raise AssertionError("A exportação deveria interromper uma página textual sem extração.")
+        except TranslationError as error:
+            assert "página 9" in str(error)
+            assert "inglês como imagem" in str(error)
 
 
 def test_visual_marker_preserves_only_the_graphic_page_as_image() -> None:
@@ -695,6 +744,7 @@ if __name__ == "__main__":
     test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()
     test_text_mode_pdf_page_exports_as_formatted_content()
+    test_text_mode_page_never_falls_back_to_an_english_image()
     test_visual_marker_preserves_only_the_graphic_page_as_image()
     test_rmarkdown_formatter_removes_nested_duplicate_headings_and_contact_fragments()
     test_image_pages_use_safe_width_and_no_html_tabsets()
