@@ -18,7 +18,7 @@
 
 ## ✨ O que é o E2PS Manual Builder?
 
-O **E2PS Manual Builder** é uma aplicação desktop criada para acelerar a preparação de manuais técnicos a partir de PDFs ou imagens. Ele transforma um conjunto de páginas soltas em um projeto editorial organizado: você seleciona o conteúdo relevante, cria recortes, define seções, escreve explicações e exporta a estrutura para **R Markdown**, pronta para revisão e geração de PDF.
+O **E2PS Manual Builder** é uma aplicação desktop criada para acelerar a preparação de manuais técnicos a partir de PDFs, imagens ou arquivos HTML/HTM. Ele transforma um conjunto de páginas soltas em um projeto editorial organizado: você seleciona o conteúdo relevante, cria recortes, define seções, escreve explicações e exporta a estrutura para **R Markdown**, pronta para revisão e geração de PDF.
 
 > **Pensado para manuais extensos:** salve o progresso em um arquivo portátil `.e2ps`, feche o aplicativo sem medo e retome o trabalho exatamente do ponto em que parou.
 
@@ -28,7 +28,7 @@ O **E2PS Manual Builder** é uma aplicação desktop criada para acelerar a prep
 
 | Recurso | O que você pode fazer |
 |:--|:--|
-| 📄 **PDFs e imagens** | Abrir um PDF completo ou importar várias imagens diretamente para a montagem do manual. |
+| 📄 **PDFs, imagens e HTML** | Abrir um PDF, importar várias imagens ou carregar um manual HTML/HTM diretamente para a montagem do manual. |
 | ✂️ **Recortes ilimitados** | Criar mais de um recorte da mesma página e utilizar cada variante como um item independente. |
 | 🧱 **Seções flexíveis** | Criar, renomear e editar seções e subseções depois de iniciadas. |
 | ✍️ **Texto entre imagens** | Inserir explicações antes, entre ou após qualquer imagem de uma seção. |
@@ -44,7 +44,7 @@ O **E2PS Manual Builder** é uma aplicação desktop criada para acelerar a prep
 
 ```mermaid
 flowchart LR
-    A[📄 PDF ou imagens] --> B[✂️ Selecionar páginas e criar recortes]
+    A[📄 PDF, imagens ou HTML] --> B[✂️ Selecionar páginas e criar recortes]
     B --> C[🧱 Montar seções e subseções]
     C --> D[✍️ Inserir textos e definir modos de tradução]
     D --> E[💾 Salvar projeto .e2ps]
@@ -106,7 +106,15 @@ py main.py
 
 ### 📥 1. Carregue o material
 
-Use **Open PDF** para abrir documentos PDF ou **Open Images** para importar imagens prontas. As páginas são exibidas em miniaturas e na área central de pré-visualização.
+Use **Open PDF** para abrir documentos PDF, **Open Images** para importar imagens prontas ou **Open HTML** para carregar manuais em `.html` ou `.htm`. Todos os formatos são convertidos em páginas com miniaturas e pré-visualização central.
+
+| Tipo de origem | O que o aplicativo aproveita |
+|:--|:--|
+| 📄 **PDF** | Renderiza páginas, extrai o texto incorporado quando disponível e permite recortes. |
+| 🖼️ **Imagens** | Importa vários arquivos de uma vez, cria miniaturas e permite recortes. |
+| 🌐 **HTML/HTM** | Renderiza o conteúdo visual em páginas para seleção/recorte e extrai o texto-fonte para a IA, sugestões de estrutura e exportação em Texto/Tabela. |
+
+> Para que imagens, CSS e fontes referenciados por um HTML sejam encontrados, mantenha o arquivo HTML e a pasta de recursos original juntos. Arquivos que dependem de login, scripts remotos ou internet podem ter aparência diferente da página exibida no navegador.
 
 ### ✂️ 2. Crie recortes quando necessário
 
@@ -155,7 +163,7 @@ Depois de configurar, utilize **Salvar Configs**. A API Key, a URL-base e o mode
 | Modo | Indicado para | Resultado |
 |:--|:--|:--|
 | 🖼️ **Imagem** | Diagramas, símbolos, certificados, desenhos ou páginas cuja aparência precisa ser preservada. | Copia a imagem original para o projeto sem inserir texto bruto da IA sobre a figura. |
-| 📊 **Texto/Tabela (OCR)** | Especificações, tabelas técnicas, listas de parâmetros, avisos e páginas com muito texto. | Solicita extração estruturada e tradução para gerar texto e tabelas editáveis no R Markdown. |
+| 📊 **Texto/Tabela (OCR)** | Especificações, tabelas técnicas, listas de parâmetros, avisos e páginas com muito texto. | Solicita extração estruturada e tradução para gerar texto e tabelas editáveis no R Markdown. Para páginas HTML, prioriza o texto-fonte extraído antes de recorrer à leitura visual. |
 
 Para tabelas técnicas que precisam sair em português de forma legível, priorize **Texto/Tabela (OCR)**. Revise sempre números, unidades, referências normativas, símbolos e valores críticos antes de publicar um manual oficial.
 
@@ -215,6 +223,7 @@ rmarkdown::render("manual.Rmd")
 | ⏳ Exportação lenta. | Páginas em Texto/Tabela são analisadas individualmente. | Acompanhe o percentual, exporte em etapas ou use o modo Imagem para diagramas e figuras. |
 | 📁 A pasta de exportação apareceu sem imagens. | A exportação ainda está processando ou uma análise visual demorou. | Aguarde a conclusão; as versões atuais copiam imagens antes da chamada à IA. |
 | 🌍 Conteúdo permanece no idioma original. | A página foi exportada como Imagem ou a extração precisa de revisão. | Use Texto/Tabela para conteúdo textual e revise o `.Rmd` antes de gerar o PDF. |
+| 🌐 HTML apareceu incompleto. | O documento depende de arquivos locais ausentes, JavaScript, login ou recursos externos. | Mantenha a pasta de recursos junto ao `.html`; para páginas dinâmicas, imprima/salve em PDF pelo navegador e importe o PDF. |
 | 🧩 O projeto não abre. | Arquivo corrompido ou inválido. | Tente uma cópia de segurança `.e2ps` e mantenha os arquivos em local confiável. |
 
 ---
@@ -227,6 +236,7 @@ rmarkdown::render("manual.Rmd")
 | `manual_builder/main_window.py` | Janela principal, páginas, seções, configurações de IA e ações de projeto. |
 | `manual_builder/models.py` | Modelos de páginas, seções e subseções. |
 | `manual_builder/pdf_service.py` | Leitura de PDFs, renderização de páginas e texto. |
+| `manual_builder/html_service.py` | Leitura de HTML/HTM, extração de texto-fonte e renderização em páginas visuais. |
 | `manual_builder/crop_dialog.py` | Interface de criação de recortes. |
 | `manual_builder/ai_service.py` | Chat, sugestões de estrutura e geração de textos. |
 | `manual_builder/translation_service.py` | Tradução, análise visual e extração estruturada. |
@@ -240,10 +250,11 @@ rmarkdown::render("manual.Rmd")
 
 ## 🧪 Teste de persistência
 
-O repositório inclui um teste local que verifica a criação e a reabertura de projetos `.e2ps`, incluindo páginas, recortes, capa, blocos de texto e preferências de IA.
+O repositório inclui testes locais para verificar a criação e reabertura de projetos `.e2ps`, assim como a importação de páginas HTML/HTM com imagem, miniatura e texto-fonte.
 
 ```bash
 python test_project_persistence.py
+QT_QPA_PLATFORM=offscreen python test_html_import.py
 ```
 
 ---

@@ -345,7 +345,11 @@ class ProjectExportService:
                     # Extrair conteúdo estruturado (tabelas e texto) usando IA.
                     # Se o provedor não retornar conteúdo, preservar a página como imagem,
                     # nunca gravar o erro da API no PDF final.
-                    structured_text = translator.extract_structured_content(item.image_path, language)
+                    structured_text = translator.extract_structured_content(
+                        item.image_path,
+                        language,
+                        item.extracted_text if item.source_type == "html" else "",
+                    )
 
                 if structured_text.strip():
                     rendered_blocks.append(structured_text)

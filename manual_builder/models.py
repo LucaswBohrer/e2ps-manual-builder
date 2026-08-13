@@ -17,6 +17,7 @@ class PdfPage:
     variant: int = 1
     extracted_text: str = ""
     export_mode: str = "image"  # "image" or "text"
+    source_type: str = "pdf"  # "pdf", "image" or "html"
 
     @property
     def filename(self) -> str:
@@ -27,9 +28,10 @@ class PdfPage:
     @property
     def display_name(self) -> str:
         """Return a short human-readable label for selection controls."""
+        source_label = "HTML " if self.source_type == "html" else ""
         if self.variant == 1:
-            return f"Page {self.number:03d}"
-        return f"Page {self.number:03d} · Crop {self.variant:02d}"
+            return f"{source_label}Page {self.number:03d}"
+        return f"{source_label}Page {self.number:03d} · Crop {self.variant:02d}"
 
 
 @dataclass(slots=True)

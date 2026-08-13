@@ -94,6 +94,7 @@ class ProjectFileService:
                         "thumbnail_asset": thumbnail_asset,
                         "extracted_text": page.extracted_text,
                         "export_mode": page.export_mode,
+                        "source_type": page.source_type,
                     }
                 )
 
@@ -177,6 +178,7 @@ class ProjectFileService:
                         variant=int(page_data.get("variant", 1)),
                         extracted_text=str(page_data.get("extracted_text", "")),
                         export_mode=str(page_data.get("export_mode", "image")),
+                        source_type=str(page_data.get("source_type", "pdf")),
                     )
                     pages.append(page)
                     pages_by_id[str(page_data["id"])] = page

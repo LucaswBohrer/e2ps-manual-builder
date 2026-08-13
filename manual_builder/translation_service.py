@@ -39,8 +39,13 @@ class TranslationService(Protocol):
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
         """Translate page image."""
 
-    def extract_structured_content(self, source: Path, target_language: str) -> str:
-        """Extract and translate image content as structured Markdown (text/tables)."""
+    def extract_structured_content(
+        self,
+        source: Path,
+        target_language: str,
+        source_text: str = "",
+    ) -> str:
+        """Extract and translate content as structured Markdown (text/tables)."""
 
 
 class ManusTranslationService:
@@ -161,31 +166,65 @@ class ManusTranslationService:
         """
         target.write_bytes(source.read_bytes())
 
-    def extract_structured_content(self, source: Path, target_language: str) -> str:
-        """Extract and translate image content as structured Markdown (text/tables) using AI Vision."""
+    def _structured_source_completion(self, source_text: str, target_language: str) -> str:
+        """Translate extracted HTML text into clean Markdown without sending an image."""
+        if self._client is None or not source_text.strip():
+            return ""
+
+        lang_name = LANGUAGE_NAMES.get(target_language, target_language)
+        prompt = (
+            "Você é um editor de manuais técnicos industriais. Converta o conteúdo-fonte abaixo "
+            f"integralmente para {lang_name}. Traduza TODOS os títulos, rótulos, descrições e valores "
+            "textuais; preserve códigos, números, unidades e referências técnicas. Quando detectar dados "
+            "de duas ou mais colunas, reconstrua-os como uma tabela Markdown. Preserve listas e a ordem "
+            "do conteúdo. Retorne APENAS o Markdown final, sem explicações, sem bloco de código e sem "
+            "marcadores de raciocínio.\n\n"
+            f"CONTEÚDO-FONTE HTML:\n{source_text[:18000]}"
+        )
+        try:
+            response = self._client.chat.completions.create(
+                model=self._model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=2200,
+                timeout=25.0,
+            )
+            return self._clean_model_output(response.choices[0].message.content)
+        except Exception:
+            return ""
+
+    def extract_structured_content(
+        self,
+        source: Path,
+        target_language: str,
+        source_text: str = "",
+    ) -> str:
+        """Extract and translate content as structured Markdown using HTML source or AI Vision."""
+        if source_text.strip():
+            structured = self._structured_source_completion(source_text, target_language)
+            if structured:
+                return structured
+
         if self._client is None:
-            return "Erro: Serviço de tradução não configurado."
+            return ""
 
         try:
             import base64
             with open(source, "rb") as image_file:
-                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-            
+                encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+
             lang_name = LANGUAGE_NAMES.get(target_language, "Brazilian Portuguese")
             prompt = (
-                f"Você é um especialista em tradução de manuais técnicos industriais. "
-                f"Analise esta imagem de página de manual e extraia TODO o conteúdo textual e tabelas. "
+                "Você é um especialista em tradução de manuais técnicos industriais. "
+                "Analise esta imagem de página de manual e extraia TODO o conteúdo textual e tabelas. "
                 f"TRADUZA ABSOLUTAMENTE TODO O TEXTO para {lang_name}. "
-                f"Não mantenha palavras ou frases no idioma de origem; traduza títulos, cabeçalhos, rótulos, observações e células de tabela. "
-                f"Reconstrua todas as tabelas em formato Markdown limpo (tabelas legíveis com colunas). "
-                f"Mantenha códigos, unidades (V, A, kW, Hz) e referências técnicas exatas. "
-                f"Retorne apenas o conteúdo em Markdown traduzido, sem introduções, comentários, marcadores de raciocínio ou blocos <think>."
+                "Não mantenha palavras ou frases no idioma de origem; traduza títulos, cabeçalhos, rótulos, "
+                "observações e células de tabela. Reconstrua todas as tabelas em Markdown limpo e legível. "
+                "Mantenha códigos, unidades (V, A, kW, Hz) e referências técnicas exatas. Retorne apenas o "
+                "conteúdo Markdown traduzido, sem introduções, comentários ou blocos <think>."
             )
-            
-            res_text = self._vision_completion(prompt, encoded_string, max_tokens=1800)
-            # Um retorno vazio permite que o exportador preserve a imagem original em vez de
-            # gravar um erro técnico no PDF final.
-            return self._clean_model_output(res_text)
+            response_text = self._vision_completion(prompt, encoded_string, max_tokens=1800)
+            return self._clean_model_output(response_text)
         except Exception:
             return ""
 

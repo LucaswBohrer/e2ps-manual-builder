@@ -43,7 +43,7 @@ from manual_builder.crop_dialog import CropDialog
 from manual_builder.export_worker import MultilingualExportWorker
 from manual_builder.project_service import ProjectExportService
 from manual_builder.project_file_service import ProjectFileService
-from manual_builder.workers import PdfRenderWorker
+from manual_builder.workers import HtmlRenderWorker, PdfRenderWorker
 
 
 class MainWindow(QMainWindow):
@@ -58,6 +58,7 @@ class MainWindow(QMainWindow):
         self._sections: list[ManualSection] = []
         self._temp_dir = TemporaryDirectory(prefix="e2ps_manual_")
         self._render_worker: PdfRenderWorker | None = None
+        self._html_render_worker: HtmlRenderWorker | None = None
         self._export_worker: MultilingualExportWorker | None = None
         self._ai_service = ManualAIService()
         self._cover_image_path: Path | None = None
@@ -72,6 +73,10 @@ class MainWindow(QMainWindow):
         open_action.triggered.connect(self.open_pdf)
         toolbar.addAction(open_action)
         
+        open_html_action = QAction("Open HTML", self)
+        open_html_action.triggered.connect(self.open_html)
+        toolbar.addAction(open_html_action)
+
         open_images_action = QAction("Open Images", self)
         open_images_action.triggered.connect(self.open_images)
         toolbar.addAction(open_images_action)
@@ -136,7 +141,7 @@ class MainWindow(QMainWindow):
         self.export_mode_combo.setEnabled(False)
         self.export_mode_combo.currentIndexChanged.connect(self._change_page_export_mode)
         
-        page_panel = QGroupBox("PDF Pages & Crops")
+        page_panel = QGroupBox("Páginas, HTML e Recortes")
         page_layout = QVBoxLayout(page_panel)
         page_layout.addWidget(self.select_all_button)
         page_layout.addWidget(self.clear_selection_button)
@@ -290,7 +295,7 @@ class MainWindow(QMainWindow):
         # Right panel now only contains AI Chat and Translation Settings
         # Preview gets its own central dedicated wide panel
 
-        self.preview = QLabel("Open a PDF to begin")
+        self.preview = QLabel("Abra um PDF, HTML ou imagens para começar")
         self.preview.setObjectName("preview")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumSize(600, 750)
@@ -299,7 +304,7 @@ class MainWindow(QMainWindow):
         preview_scroll.setWidgetResizable(True)
         preview_scroll.setWidget(self.preview)
         
-        preview_group = QGroupBox("📄 Pré-visualização Ampliada da Página do PDF")
+        preview_group = QGroupBox("📄 Pré-visualização Ampliada do Manual")
         preview_layout = QVBoxLayout(preview_group)
         preview_layout.addWidget(preview_scroll)
 
@@ -489,6 +494,45 @@ class MainWindow(QMainWindow):
         self._render_worker.start()
         self.statusBar().showMessage("Rendering PDF pages...")
 
+    def open_html(self) -> None:
+        """Open a static HTML/HTM manual and render it as editable visual pages."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Abrir Manual HTML",
+            "",
+            "Arquivos HTML (*.html *.htm)",
+        )
+        if not file_path:
+            return
+
+        self._pages.clear()
+        self._sections.clear()
+        self._project_path = None
+        self.page_list.clear()
+        self.section_tree.clear()
+        self.export_button.setEnabled(False)
+        self.save_project_action.setEnabled(False)
+        self.select_all_button.setEnabled(False)
+        self.clear_selection_button.setEnabled(False)
+        self.crop_page_button.setEnabled(False)
+        self.ai_suggest_button.setEnabled(False)
+        self.add_section_button.setEnabled(False)
+
+        destination = Path(self._temp_dir.name) / "html_render"
+        if destination.exists():
+            import shutil
+            shutil.rmtree(destination)
+        self._html_render_worker = HtmlRenderWorker(Path(file_path), destination)
+        self._html_render_worker.progress_changed.connect(self._update_render_progress)
+        self._html_render_worker.completed.connect(self._rendering_completed)
+        self._html_render_worker.failed.connect(self._rendering_failed)
+
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress.setVisible(True)
+        self._html_render_worker.start()
+        self.statusBar().showMessage("Lendo o HTML, extraindo texto-fonte e criando pré-visualizações…")
+
     def open_images(self) -> None:
         """Open multiple image files directly as manual pages without PDF conversion."""
         file_paths, _ = QFileDialog.getOpenFileNames(
@@ -538,7 +582,8 @@ class MainWindow(QMainWindow):
                     image_path=dest_image_path,
                     thumbnail_path=dest_thumb_path,
                     variant=variant,
-                    extracted_text=f"Imagem direta {src_path.stem}"
+                    extracted_text=f"Imagem direta {src_path.stem}",
+                    source_type="image",
                 )
                 pages.append(pdf_page)
             except Exception as e:
@@ -563,13 +608,23 @@ class MainWindow(QMainWindow):
         self.ai_suggest_button.setEnabled(bool(self._pages))
         self.add_section_button.setEnabled(bool(self._pages))
         self.save_project_action.setEnabled(bool(self._pages))
-        self.statusBar().showMessage(f"Successfully rendered {len(pages)} pages")
+        html_pages = sum(1 for page in pages if page.source_type == "html")
+        if html_pages:
+            self.statusBar().showMessage(
+                f"HTML importado com {len(pages)} página(s) visuais e texto-fonte extraído para a IA."
+            )
+        else:
+            self.statusBar().showMessage(f"Carregadas {len(pages)} página(s) do manual.")
 
     def _rendering_failed(self, error: str) -> None:
         self.progress.setVisible(False)
-        self.preview.setText("Could not render this PDF")
-        QMessageBox.critical(self, "PDF error", f"The PDF could not be opened.\n\n{error}")
-        self.statusBar().showMessage("Rendering failed")
+        self.preview.setText("Não foi possível renderizar este arquivo")
+        QMessageBox.critical(
+            self,
+            "Erro ao abrir manual",
+            f"O arquivo não pôde ser convertido em páginas.\n\n{error}",
+        )
+        self.statusBar().showMessage("Falha ao renderizar o manual")
 
     def _show_current_page(self, item: QListWidgetItem | None) -> None:
         if item is None:
@@ -750,7 +805,15 @@ class MainWindow(QMainWindow):
             Qt.TransformationMode.SmoothTransformation,
         )
         thumbnail.save(str(thumbnail_path), "PNG")
-        crop_page = PdfPage(page.number, image_path, thumbnail_path, next_variant)
+        crop_page = PdfPage(
+            page.number,
+            image_path,
+            thumbnail_path,
+            next_variant,
+            page.extracted_text,
+            page.export_mode,
+            page.source_type,
+        )
         self._pages.append(crop_page)
         crop_item = QListWidgetItem(crop_page.display_name)
         crop_item.setData(Qt.ItemDataRole.UserRole, crop_page)

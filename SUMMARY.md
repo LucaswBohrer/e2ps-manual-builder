@@ -23,5 +23,10 @@ O repositório `https://github.com/LuquinhasBohrer/e2ps-manual-builder.git` foi 
    - A API Key, a Base URL e o modelo configurados são mantidos localmente no computador por meio das preferências da aplicação.
    - Por segurança, a API Key não é gravada nem compartilhada dentro dos arquivos `.e2ps`.
 
-6. **Sincronização com o GitHub**:
+6. **Importação e Pré-visualização de HTML/HTM**:
+   - Adicionada a ação **Open HTML**, que renderiza manuais HTML/HTM estáticos como páginas visuais, com miniaturas, pré-visualização e suporte aos mesmos recortes aplicados a PDFs.
+   - O texto-fonte visível do HTML é extraído e vinculado às páginas importadas, oferecendo contexto mais fiel para sugestões da IA e para o modo **Texto/Tabela (OCR)** durante a exportação.
+   - Ao escolher Texto/Tabela para uma página HTML, a exportação prioriza esse texto-fonte antes da leitura visual; tabelas e conteúdo técnico continuam editáveis no arquivo R Markdown.
+
+7. **Sincronização com o GitHub**:
    - Todas as melhorias foram testadas, validadas e enviadas (*commit and push*) para o repositório oficial.
