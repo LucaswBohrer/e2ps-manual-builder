@@ -176,11 +176,11 @@ Depois de configurar, utilize **Salvar Configs**. A API Key, a URL-base e o mode
 | Modo | Indicado para | Resultado |
 |:--|:--|:--|
 | 🖼️ **Imagem** | Diagramas, símbolos, certificados, desenhos ou páginas cuja aparência precisa ser preservada. | Copia a imagem original para o projeto sem inserir texto bruto da IA sobre a figura. |
-| 📊 **Texto/Tabela (OCR)** | Especificações, tabelas técnicas, listas de parâmetros, avisos e páginas com muito texto. | Solicita extração estruturada e tradução para gerar texto e tabelas editáveis no R Markdown. Para páginas HTML e PDFs com texto extraível, prioriza o texto-fonte antes de recorrer à leitura visual. |
+| 📊 **Texto/Tabela (OCR)** | Especificações, tabelas técnicas, listas de parâmetros, avisos e páginas com muito texto. | Usa primeiro o texto selecionável do PDF/HTML, limpa sobreposições de extração e gera Markdown editável. Quando o idioma precisa mudar, traduz blocos contíguos da seção — não uma imagem por página. |
 
 Para tabelas técnicas que precisam sair em português de forma legível, priorize **Texto/Tabela (OCR)**. Revise sempre números, unidades, referências normativas, símbolos e valores críticos antes de publicar um manual oficial.
 
-Se a IA não conseguir extrair uma página, o aplicativo preserva a imagem original. Ele não deve inserir mensagens de erro no arquivo `.Rmd` nem no PDF final.
+> **Fluxo resiliente para PDFs grandes:** páginas com texto extraível não são enviadas ao modelo de visão e nunca retornam como imagem no idioma original. O aplicativo formata localmente o conteúdo-fonte e, quando necessário, solicita a tradução em blocos de seção. A leitura visual fica restrita a páginas realmente sem texto selecionável, como digitalizações. Se essa leitura falhar, o `.Rmd` recebe um comentário de revisão em vez de interromper toda a exportação.
 
 ---
 
@@ -212,7 +212,7 @@ O formato **`.e2ps`** é o arquivo de projeto oficial do E2PS Manual Builder. El
 
 ## 📦 Exportação em R Markdown e PDF
 
-A exportação gera uma pasta organizada por idioma com o arquivo `.Rmd`, imagens e outros ativos necessários para a compilação do manual. A interface permite selecionar **Português**, **Inglês** e **Espanhol** conforme a necessidade do projeto. Páginas escolhidas em **Texto/Tabela (OCR)** são convertidas em Markdown técnico: blocos de dados `rótulo: valor` são organizados como tabelas e marcadores são normalizados como listas, preservando uma leitura mais limpa após o *knit* para PDF.
+A exportação gera uma pasta organizada por idioma com o arquivo `.Rmd`, imagens e outros ativos necessários para a compilação do manual. A interface permite selecionar **Português**, **Inglês** e **Espanhol** conforme a necessidade do projeto. Páginas escolhidas em **Texto/Tabela (OCR)** são convertidas em Markdown técnico a partir do texto-fonte: blocos de dados `rótulo: valor` são organizados como tabelas, marcadores são normalizados como listas e frases duplicadas por caixas de texto sobrepostas são recompostas antes do *knit* para PDF.
 
 Para renderizar o PDF, abra o arquivo `.Rmd` em um ambiente com R Markdown configurado, como o RStudio, e execute:
 

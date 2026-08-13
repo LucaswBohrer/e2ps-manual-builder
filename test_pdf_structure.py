@@ -15,7 +15,7 @@ from manual_builder.ai_service import (
 from manual_builder.main_window import MainWindow
 from manual_builder.models import ManualSection, PdfPage
 from manual_builder.project_service import ProjectExportService
-from manual_builder.translation_service import ManusTranslationService, TranslationError
+from manual_builder.translation_service import ManusTranslationService
 from manual_builder.workers import PdfStructureWorker
 
 
@@ -187,6 +187,14 @@ Desconecte a alimentação antes da manutenção.
     assert "Práticas inseguras" in result
     assert "### Informações importantes" in result
     assert "#### AVISO" in result
+
+
+def test_rmarkdown_formatter_reconstructs_overlapping_pdf_sentence_fragments() -> None:
+    source = "Always\nAlways read\nread\nread the\nthe manual\nmanual before use."
+
+    result = ProjectExportService._format_rmd_text(source)
+
+    assert result == "Always read the manual before use."
 
 
 def test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line() -> None:
@@ -527,6 +535,23 @@ def test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection() -> No
         app.processEvents()
 
 
+class _BatchStructuredTranslator:
+    """Fixture that exposes the new section-level translation contract."""
+
+    supports_page_translation = True
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def translate_section_text(self, source_text: str, target_language: str) -> str:
+        self.calls.append(source_text)
+        assert target_language == "pt"
+        return "Tensão nominal: 400 V\nCorrente nominal: 16 A"
+
+    def translate_page(self, source: Path, target: Path, target_language: str) -> None:
+        target.write_bytes(source.read_bytes())
+
+
 class _StructuredTranslator:
     """Deterministic translator fixture that returns already-extracted technical content."""
 
@@ -598,6 +623,38 @@ Frequência: 50 Hz
     assert "1. Ligue a alimentação." in result
 
 
+def test_contiguous_text_pages_use_one_section_translation_batch() -> None:
+    with TemporaryDirectory() as temporary_directory:
+        root = Path(temporary_directory)
+        first = root / "page_001.png"
+        second = root / "page_002.png"
+        first.write_bytes(b"first")
+        second.write_bytes(b"second")
+        pages = [
+            PdfPage(1, first, first, extracted_text="Rated voltage: 400 V", export_mode="text"),
+            PdfPage(2, second, second, extracted_text="Rated current: 16 A", export_mode="text"),
+        ]
+        translator = _BatchStructuredTranslator()
+        ProjectExportService()._write_language_project(
+            root / "manual",
+            "Manual de teste",
+            [ManualSection(title="Dados técnicos", content=pages)],
+            "T-000",
+            "2026-08",
+            "pt",
+            translator=translator,
+            translate_images=True,
+        )
+        rmd = (root / "manual" / "manual.rmd").read_text(encoding="utf-8")
+
+    assert len(translator.calls) == 1
+    assert "Rated voltage" in translator.calls[0]
+    assert "Rated current" in translator.calls[0]
+    assert "| Tensão nominal | 400 V |" in rmd
+    assert "include_graphics('img/page_001.png')" not in rmd
+    assert "include_graphics('img/page_002.png')" not in rmd
+
+
 def test_text_mode_pdf_page_exports_as_formatted_content() -> None:
     with TemporaryDirectory() as temporary_directory:
         root = Path(temporary_directory)
@@ -630,7 +687,7 @@ def test_text_mode_pdf_page_exports_as_formatted_content() -> None:
     assert "include_graphics('img/technical_page.png')" not in rmd
 
 
-def test_text_mode_page_never_falls_back_to_an_english_image() -> None:
+def test_text_mode_page_keeps_extracted_source_when_translation_is_unavailable() -> None:
     with TemporaryDirectory() as temporary_directory:
         root = Path(temporary_directory)
         source = root / "textual_page.png"
@@ -643,22 +700,20 @@ def test_text_mode_page_never_falls_back_to_an_english_image() -> None:
             export_mode="text",
             source_type="pdf",
         )
-        try:
-            ProjectExportService()._write_language_project(
-                root / "manual",
-                "Manual de teste",
-                [ManualSection(title="Segurança", content=[page])],
-                "T-004",
-                "2026-08",
-                "pt",
-                translator=_EmptyStructuredTranslator(),
-                translate_images=True,
-            )
-            raise AssertionError("A exportação deveria interromper uma página textual sem extração.")
-        except TranslationError as error:
-            assert "página 9" in str(error)
-            assert "inglês como imagem" in str(error)
-            assert "limite temporário" in str(error)
+        ProjectExportService()._write_language_project(
+            root / "manual",
+            "Manual de teste",
+            [ManualSection(title="Segurança", content=[page])],
+            "T-004",
+            "2026-08",
+            "pt",
+            translator=_EmptyStructuredTranslator(),
+            translate_images=True,
+        )
+        rmd = (root / "manual" / "manual.rmd").read_text(encoding="utf-8")
+
+    assert "Safety procedure" in rmd
+    assert "include_graphics('img/textual_page.png')" not in rmd
 
 
 def test_visual_marker_preserves_only_the_graphic_page_as_image() -> None:
@@ -754,6 +809,7 @@ if __name__ == "__main__":
     test_translation_cleanup_keeps_only_the_final_translated_content()
     test_rmarkdown_formatter_removes_ai_metacommentary_from_saved_text_blocks()
     test_rmarkdown_formatter_removes_duplicate_source_chapter_and_preserves_subheading()
+    test_rmarkdown_formatter_reconstructs_overlapping_pdf_sentence_fragments()
     test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line()
     test_structured_translation_splits_dense_source_text_on_safe_boundaries()
     test_groq_rate_limit_is_detected_and_the_retry_hint_is_parsed()
@@ -771,8 +827,9 @@ if __name__ == "__main__":
     test_window_reports_missing_pages_from_detected_chapter_coverage()
     test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()
+    test_contiguous_text_pages_use_one_section_translation_batch()
     test_text_mode_pdf_page_exports_as_formatted_content()
-    test_text_mode_page_never_falls_back_to_an_english_image()
+    test_text_mode_page_keeps_extracted_source_when_translation_is_unavailable()
     test_visual_marker_preserves_only_the_graphic_page_as_image()
     test_rmarkdown_formatter_removes_nested_duplicate_headings_and_contact_fragments()
     test_image_pages_use_safe_width_and_no_html_tabsets()

@@ -40,6 +40,9 @@ class TranslationService(Protocol):
     def translate_text(self, text: str, target_language: str) -> str:
         """Translate text."""
 
+    def translate_section_text(self, source_text: str, target_language: str) -> str:
+        """Translate and structure one contiguous manual section as Markdown."""
+
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
         """Translate page image."""
 
@@ -311,15 +314,13 @@ class ManusTranslationService:
             f"Preserve identifiers, product names, codes, units, and formatting. Return only the translated text.\n\n"
             f"TEXT: {text}"
         )
-        try:
-            response = self._client.chat.completions.create(
-                model=self._model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-            )
-            return self._clean_model_output(response.choices[0].message.content) or text
-        except Exception:
-            return text
+        translated = self._completion_with_retries(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=180,
+            attempts=2,
+        )
+        return translated or text
 
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
         """Preserve a page image without adding unreliable AI text overlays.
@@ -331,7 +332,7 @@ class ManusTranslationService:
         target.write_bytes(source.read_bytes())
 
     @staticmethod
-    def _source_text_chunks(source_text: str, maximum_characters: int = 1800) -> list[str]:
+    def _source_text_chunks(source_text: str, maximum_characters: int = 3600) -> list[str]:
         """Split dense extracted pages on line boundaries before an AI translation request.
 
         A page with tables can contain enough extracted characters to exceed Groq's per-request
@@ -389,7 +390,7 @@ class ManusTranslationService:
                 translated = self._completion_with_retries(
                     model=self._model,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=650,
+                    max_tokens=850,
                     attempts=2,
                 )
                 if translated:
@@ -398,6 +399,19 @@ class ManusTranslationService:
                 self._last_error = str(error)
                 continue
         return "\n\n".join(translated_chunks).strip()
+
+    def translate_section_text(self, source_text: str, target_language: str) -> str:
+        """Translate a complete extracted section, never an image page by page.
+
+        The exporter aggregates contiguous textual pages before calling this method.  Large
+        sections are split internally only at safe line boundaries, keeping the API workload
+        proportional to the amount of actual text rather than to the PDF page count.  If the
+        selected language is already the source language, no remote request is made.
+        """
+        if not source_text.strip() or target_language == self._source_language:
+            return source_text
+        translated = self._structured_source_completion(source_text, target_language)
+        return translated or source_text
 
     @staticmethod
     def _requires_visual_layout_reconstruction(source_text: str) -> bool:

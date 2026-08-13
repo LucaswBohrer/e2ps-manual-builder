@@ -10,11 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from manual_builder.models import ManualSection, ManualSubsection, PdfPage
-from manual_builder.translation_service import (
-    TranslationError,
-    TranslationService,
-    create_translation_service,
-)
+from manual_builder.translation_service import TranslationService, create_translation_service
 
 
 RMD_TEMPLATE = r"""---
@@ -327,6 +323,121 @@ class ProjectExportService:
         )
         (project_dir / "manual.rmd").write_text(content, encoding="utf-8")
 
+    _VISUAL_SECTION_TERMS = (
+        "imagem", "ilustra", "figura", "desenho", "diagrama", "vista explodida",
+        "peças", "pecas", "parts", "spare",
+    )
+    _GRAPHIC_TEXT_MARKERS = (
+        "figure ", "fig. ", "drawing", "diagram", "dimensional", "dimensions",
+        "exploded view", "vista explodida", "lista de peças", "parts list",
+    )
+
+    @classmethod
+    def _content_prefers_images(cls, content_title: str) -> bool:
+        """Return whether a user-created section is explicitly an illustration section."""
+        normalized = cls._normalized_heading(content_title)
+        return any(term in normalized for term in cls._VISUAL_SECTION_TERMS)
+
+    @classmethod
+    def _source_looks_graphical(cls, page: PdfPage, content_title: str) -> bool:
+        """Identify clear diagrams locally without spending vision calls on text pages."""
+        if getattr(page, "export_mode", "image") == "image":
+            return True
+        if cls._content_prefers_images(content_title):
+            return True
+        text = (page.extracted_text or "").lower()
+        if not text.strip():
+            return False
+        has_graphic_marker = any(marker in text for marker in cls._GRAPHIC_TEXT_MARKERS)
+        dimension_heavy = ("ø" in text or "diameter" in text) and len(text) < 1800
+        return has_graphic_marker and (dimension_heavy or len(text) < 700)
+
+    @staticmethod
+    def _image_rmd_block(
+        section_index: int,
+        subsection_index: int,
+        page_counter: int,
+        filename: str,
+    ) -> str:
+        """Return a stable R Markdown image block for an intentionally visual page."""
+        return (
+            "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
+            "fig.align='center', out.width='94%%', fig.pos='H'}\n"
+            "knitr::include_graphics('img/%s')\n```"
+            % (section_index, subsection_index, page_counter, filename)
+        )
+
+    def _render_textual_page_batch(
+        self,
+        pages: list[PdfPage],
+        language: str,
+        translator: TranslationService | None,
+        content_title: str,
+        on_page_exported: Callable[[], None] | None,
+    ) -> str:
+        """Render contiguous textual PDF pages from their extracted source text.
+
+        A section is translated once as an ordered source block. In the source language,
+        formatting is fully local and deterministic, with no request to the provider.
+        """
+        source_text = "\n\n".join(
+            page.extracted_text.strip() for page in pages if page.extracted_text.strip()
+        ).strip()
+        structured_text = source_text
+        translate_batch = getattr(translator, "translate_section_text", None) if translator else None
+        if source_text and callable(translate_batch):
+            try:
+                translated = translate_batch(source_text, language)
+                if translated and translated.strip():
+                    structured_text = translated
+            except Exception:
+                structured_text = source_text
+        elif source_text and translator is not None:
+            # Compatibility path for custom/older providers: one batch request, never one per page.
+            try:
+                translated = translator.extract_structured_content(
+                    pages[0].image_path, language, source_text
+                )
+                if translated and translated.strip() and translated.strip() != "[[KEEP_AS_IMAGE]]":
+                    structured_text = translated
+            except Exception:
+                structured_text = source_text
+
+        rendered = self._format_rmd_text(structured_text, context_title=content_title)
+        if not rendered:
+            page_numbers = ", ".join(str(page.number) for page in pages)
+            rendered = (
+                "<!-- Conteúdo textual indisponível para as páginas "
+                f"{page_numbers}; revise a seleção no editor. -->"
+            )
+        if on_page_exported is not None:
+            for _page in pages:
+                on_page_exported()
+        return rendered
+
+    def _render_scanned_page(
+        self,
+        page: PdfPage,
+        language: str,
+        translator: TranslationService | None,
+        content_title: str,
+    ) -> str:
+        """Use vision only for a page without selectable source text."""
+        structured_text = ""
+        if translator is not None:
+            try:
+                structured_text = translator.extract_structured_content(page.image_path, language, "")
+            except Exception:
+                structured_text = ""
+        if structured_text.strip() and structured_text.strip() != "[[KEEP_AS_IMAGE]]":
+            return self._format_rmd_text(structured_text, context_title=content_title)
+        if structured_text.strip() == "[[KEEP_AS_IMAGE]]":
+            return "[[KEEP_AS_IMAGE]]"
+        return (
+            "<!-- Não foi possível ler automaticamente o conteúdo da página "
+            f"{page.number}. Adicione um recorte ou texto manualmente no editor. -->"
+        )
+
     def _render_mixed_content(
         self,
         content_items: list[PdfPage | str],
@@ -339,75 +450,58 @@ class ProjectExportService:
         on_page_exported: Callable[[], None] | None,
         content_title: str = "",
     ) -> str:
-        """Render mixed list of PdfPages and text snippets in exact user order."""
+        """Render content in order, batching only contiguous textual PDF pages."""
         rendered_blocks: list[str] = []
+        pending_text_pages: list[PdfPage] = []
         page_counter = 0
+
+        def flush_text_pages() -> None:
+            nonlocal pending_text_pages
+            if pending_text_pages:
+                rendered_blocks.append(
+                    self._render_textual_page_batch(
+                        pending_text_pages, language, translator, content_title, on_page_exported
+                    )
+                )
+                pending_text_pages = []
+
         for item in content_items:
             if isinstance(item, str):
+                flush_text_pages()
                 if item.strip():
                     rendered_blocks.append(self._format_rmd_text(item, context_title=content_title))
-            elif isinstance(item, PdfPage):
-                page_counter += 1
+                continue
+            if not isinstance(item, PdfPage):
+                continue
 
-                # Sempre colocar o arquivo-fonte na pasta final antes de chamar a IA.
-                # Assim a exportação fica utilizável mesmo se o provedor demorar ou falhar.
-                target = image_dir / item.filename
-                shutil.copy2(item.image_path, target)
+            page_counter += 1
+            graphical = self._source_looks_graphical(item, content_title)
+            if not graphical and item.extracted_text.strip():
+                pending_text_pages.append(item)
+                continue
 
-                # Páginas textuais não podem degradar silenciosamente para a imagem original.
-                # A leitura visual devolve [[KEEP_AS_IMAGE]] somente quando confirmou que o
-                # conteúdo é uma ilustração técnica sem texto essencial.
-                structured_text = ""
-                export_mode = getattr(item, "export_mode", "image")
-                if export_mode == "text":
-                    if not translate_images or translator is None:
-                        raise TranslationError(
-                            f"Não foi possível extrair o texto da página {item.number}: "
-                            "configure uma chave GroqCloud válida e tente exportar novamente."
-                        )
-                    structured_text = translator.extract_structured_content(
-                        item.image_path,
-                        language,
-                        item.extracted_text,
-                    )
-                    if not structured_text.strip():
-                        provider_detail = str(getattr(translator, "last_error", "") or "").strip()
-                        detail_message = (
-                            f" Detalhe retornado pela GroqCloud: {provider_detail}"
-                            if provider_detail
-                            else ""
-                        )
-                        raise TranslationError(
-                            f"Não foi possível extrair o texto da página {item.number}. "
-                            "A exportação foi interrompida para não incluir esta página em inglês como imagem. "
-                            "O programa tentou novamente com uma imagem otimizada; verifique a conexão ou "
-                            f"o modelo de visão GroqCloud e tente exportar outra vez.{detail_message}"
-                        )
-
-                keep_as_image = structured_text.strip() == "[[KEEP_AS_IMAGE]]"
-                if structured_text.strip() and not keep_as_image:
-                    rendered_blocks.append(
-                        self._format_rmd_text(structured_text, context_title=content_title)
-                    )
-                else:
-                    if (
-                        translate_images
-                        and translator is not None
-                        and export_mode == "image"
-                    ):
-                        translator.translate_page(item.image_path, target, language)
-
-                    rendered_blocks.append(
-                        "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
-                        "fig.align='center', out.width='94%%', fig.pos='H'}\n"
-                        "knitr::include_graphics('img/%s')\n```"
-                        % (section_index, subsection_index, page_counter, item.filename)
-                    )
-                
+            flush_text_pages()
+            scanned_or_visual = self._render_scanned_page(item, language, translator, content_title)
+            if scanned_or_visual != "[[KEEP_AS_IMAGE]]" and not graphical:
+                rendered_blocks.append(scanned_or_visual)
                 if on_page_exported is not None:
                     on_page_exported()
-                    
-        return "\n\n".join(rendered_blocks)
+                continue
+
+            # Only confirmed illustrations, explicitly selected image pages and visual sections
+            # are copied into the final project. Textual pages never fall back to the source image.
+            target = image_dir / item.filename
+            shutil.copy2(item.image_path, target)
+            if translate_images and translator is not None and getattr(item, "export_mode", "image") == "image":
+                translator.translate_page(item.image_path, target, language)
+            rendered_blocks.append(
+                self._image_rmd_block(section_index, subsection_index, page_counter, item.filename)
+            )
+            if on_page_exported is not None:
+                on_page_exported()
+
+        flush_text_pages()
+        return "\n\n".join(block for block in rendered_blocks if block.strip())
 
     @staticmethod
     def _strip_ai_metacommentary(value: str) -> str:
@@ -567,6 +661,52 @@ class ProjectExportService:
         return "\n".join(repaired)
 
     @staticmethod
+    def _collapse_overlapping_pdf_lines(text: str) -> str:
+        """Repair word-by-word overlap artifacts produced by some selectable PDFs.
+
+        Certain manufacturer PDFs expose the same sentence through overlapping text boxes.
+        PyMuPDF then yields a sequence such as ``Always / Always read / read / read the``.
+        This routine joins only short, consecutively overlapping fragments and leaves normal
+        paragraphs, Markdown and tables untouched.
+        """
+        def clean_inline_artifacts(line: str) -> str:
+            # ``isis`` and ``thethe`` commonly arise where two text boxes overlap exactly.
+            cleaned = re.sub(r"\b([A-Za-zÀ-ÿ]{2,})\1\b", r"\1", line)
+            # A second extractor artifact is a duplicated word inside an otherwise normal line.
+            return re.sub(r"\b([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9_-]*)(?:\s+\1\b)+", r"\1", cleaned)
+
+        source_lines = [clean_inline_artifacts(line) for line in text.splitlines()]
+        deduplicated: list[str] = []
+        for line in source_lines:
+            if deduplicated and line.strip() and line.strip().casefold() == deduplicated[-1].strip().casefold():
+                continue
+            deduplicated.append(line)
+
+        def can_merge(line: str) -> bool:
+            words = line.strip().split()
+            return bool(words) and len(words) <= 18 and not line.lstrip().startswith(("#", "|", "- ", "* "))
+
+        repaired: list[str] = []
+        for line in deduplicated:
+            if not repaired or not can_merge(line) or not can_merge(repaired[-1]):
+                repaired.append(line.rstrip())
+                continue
+            previous_words = repaired[-1].strip().split()
+            current_words = line.strip().split()
+            overlap = 0
+            for size in range(min(len(previous_words), len(current_words), 4), 0, -1):
+                if [word.casefold() for word in previous_words[-size:]] == [
+                    word.casefold() for word in current_words[:size]
+                ]:
+                    overlap = size
+                    break
+            if overlap:
+                repaired[-1] = " ".join(previous_words + current_words[overlap:])
+            else:
+                repaired.append(line.rstrip())
+        return "\n".join(repaired)
+
+    @staticmethod
     def _format_rmd_text(value: str, context_title: str = "") -> str:
         """Normalize human/AI text into safe, readable R Markdown.
 
@@ -576,6 +716,7 @@ class ProjectExportService:
         """
         text = ProjectExportService._strip_ai_metacommentary(value)
         text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+        text = ProjectExportService._collapse_overlapping_pdf_lines(text)
         text = re.sub(r"^```(?:markdown|md)?\s*|\s*```$", "", text, flags=re.IGNORECASE).strip()
         text = ProjectExportService._expand_inline_markdown_tables(text)
         text = ProjectExportService._remove_duplicate_source_headings(text, context_title)
