@@ -271,7 +271,9 @@ class MainWindow(QMainWindow):
         self.image_review_button.setToolTip(
             "Lista, por seção e subseção, as imagens do HTML que precisam de captura ou recorte."
         )
-        self.image_review_button.clicked.connect(self._show_pending_image_review)
+        self.image_review_button.clicked.connect(
+            lambda: self._show_pending_image_review(show_dialog=True)
+        )
 
         ai_chat_layout.addWidget(self.chat_display)
         ai_chat_layout.addLayout(chat_input_layout)
@@ -709,33 +711,42 @@ class MainWindow(QMainWindow):
                     pending.append(f"{section_location} › Subseção \"{subsection.title}\"")
         return list(dict.fromkeys(pending))
 
-    def _show_pending_image_review(self) -> None:
-        """Display in the AI panel where HTML images still require manual capture."""
+    def _show_pending_image_review(self, show_dialog: bool = False) -> None:
+        """Display image-capture locations in the AI panel and, when requested, a dialog."""
         pending = self._pending_image_locations()
         if not pending:
             message = (
-                "Nenhuma imagem pendente de captura foi encontrada nas seções atuais. "
+                "Nenhuma imagem pendente de captura foi encontrada nas seções atuais.\n\n"
                 "Se você ainda precisar incluir uma figura, crie um recorte da pré-visualização "
-                "e adicione-o à seção desejada."
+                "ou importe uma imagem e adicione-a à seção desejada."
             )
             self.chat_display.append(
                 "<br><b>🤖 Revisão de imagens pendentes:</b><br>"
-                f"{escape(message)}"
+                f"{escape(message).replace(chr(10), '<br>')}"
             )
             self.statusBar().showMessage("Nenhuma imagem pendente de captura.", 5000)
-            return
+        else:
+            location_lines = "\n".join(f"• {location}" for location in pending)
+            message = (
+                "Há imagens pendentes nas seguintes partes do manual:\n\n"
+                f"{location_lines}\n\n"
+                "Abra a pré-visualização, crie um recorte ou importe uma imagem. Em seguida, "
+                "use Editar conteúdo na seção indicada para posicioná-la no manual."
+            )
+            items = "".join(f"<li>{escape(location)}</li>" for location in pending)
+            self.chat_display.append(
+                "<br><b>🤖 Revisão de imagens pendentes:</b><br>"
+                "Há imagens pendentes nas partes abaixo. Abra a pré-visualização, crie um recorte "
+                "ou importe uma imagem e, depois, use Editar conteúdo para adicioná-la à parte indicada."
+                f"<ol>{items}</ol>"
+            )
+            self.statusBar().showMessage(
+                f"Há imagens pendentes em {len(pending)} seção(ões). Veja a revisão.",
+                9000,
+            )
 
-        items = "".join(f"<li>{escape(location)}</li>" for location in pending)
-        self.chat_display.append(
-            "<br><b>🤖 Revisão de imagens pendentes:</b><br>"
-            "Há imagens pendentes nas partes abaixo. Abra a pré-visualização, crie um recorte "
-            "ou importe uma imagem e, depois, use Editar conteúdo para adicioná-la à parte indicada."
-            f"<ol>{items}</ol>"
-        )
-        self.statusBar().showMessage(
-            f"Há {len(pending)} imagem(ns) pendente(s) de captura. Veja o painel de IA.",
-            9000,
-        )
+        if show_dialog:
+            QMessageBox.information(self, "Revisar imagens pendentes", message)
 
     def _rendering_failed(self, error: str) -> None:
         self.progress.setVisible(False)

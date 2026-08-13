@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from manual_builder.content_editor_dialog import ContentEditorDialog
 from manual_builder.html_service import HtmlRenderService
@@ -66,6 +66,15 @@ def main() -> None:
         assert window._pending_image_locations() == ['Seção "Safety"']
         assert window.image_review_button.isEnabled()
         assert window.section_tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+        shown_reviews: list[str] = []
+        original_information = QMessageBox.information
+        QMessageBox.information = lambda _parent, _title, text: shown_reviews.append(text)
+        try:
+            window.image_review_button.click()
+        finally:
+            QMessageBox.information = original_information
+        assert shown_reviews and 'Seção "Safety"' in shown_reviews[0]
 
         safety_item = window.section_tree.topLevelItem(1)
         window.section_tree.setCurrentItem(safety_item)
