@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import fitz
@@ -11,6 +12,7 @@ from manual_builder.ai_service import ManualAIService, PdfStructurePlan
 from manual_builder.html_service import HtmlRenderService, HtmlStructurePlan
 from manual_builder.models import PdfPage
 from manual_builder.pdf_service import PdfRenderService
+from manual_builder.translation_service import ManusTranslationService
 
 
 class PdfRenderWorker(QThread):
@@ -59,13 +61,69 @@ class PdfStructureWorker(QThread):
         self._base_url = base_url
         self._model = model
 
+    @staticmethod
+    def _pages_needing_visual_read(pages: list[PdfPage]) -> list[PdfPage]:
+        """Identify PDF pages whose selectable text is too sparse for reliable analysis.
+
+        A page can expose only a footer or page number while its actual technical content
+        is rasterized. Such pages need visual reading before the structure is generated.
+        """
+        base_pages = [page for page in pages if page.variant == 1 and page.source_type == "pdf"]
+        sparse_pages = [page for page in base_pages if len(page.extracted_text.strip()) < 350]
+        if not base_pages or not sparse_pages:
+            return []
+        if len(sparse_pages) / len(base_pages) >= 0.35:
+            return sparse_pages
+        return sparse_pages[:8]
+
+    @staticmethod
+    def _sample_pages(pages: list[PdfPage], limit: int = 16) -> list[PdfPage]:
+        """Keep visual requests bounded while covering the whole document."""
+        if len(pages) <= limit:
+            return pages
+        last = len(pages) - 1
+        indexes = {round(position * last / (limit - 1)) for position in range(limit)}
+        return [page for index, page in enumerate(pages) if index in indexes]
+
+    def _supplement_visual_text(self) -> int:
+        """Use vision only when selectable PDF text is unavailable or materially incomplete."""
+        candidates = self._sample_pages(self._pages_needing_visual_read(self._pages))
+        if not candidates or not self._api_key.strip():
+            return 0
+        vision_service = ManusTranslationService(
+            source_language="en",
+            api_key=self._api_key,
+            endpoint=self._base_url,
+            model=self._model,
+        )
+        recovered = 0
+        for page in candidates:
+            visual_text = vision_service.extract_page_outline_text(page.image_path)
+            if len(visual_text.strip()) >= 20:
+                replacement = replace(page, extracted_text=visual_text.strip())
+                page_index = self._pages.index(page)
+                self._pages[page_index] = replacement
+                recovered += 1
+        return recovered
+
     def run(self) -> None:
-        """Create a selection-focused structure, falling back safely when IA is unavailable."""
+        """Create an evidence-based structure without blocking the main interface."""
         try:
+            recovered_pages = self._supplement_visual_text()
             service = ManualAIService(self._api_key, self._base_url, self._model)
             plan: PdfStructurePlan = service.create_pdf_structure(
                 self._pages, self._manual_title
             )
+            plan.extracted_text_by_page = {
+                page.number: page.extracted_text
+                for page in self._pages
+                if page.extracted_text.strip()
+            }
+            if recovered_pages:
+                prefix = (
+                    f"Leitura visual aplicada a {recovered_pages} página(s) sem texto extraível. "
+                )
+                plan.note = prefix + (plan.note or "Estrutura criada a partir do conteúdo visível.")
             self.completed.emit(plan)
         except Exception as error:
             self.failed.emit(str(error))

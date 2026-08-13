@@ -194,6 +194,31 @@ class ManusTranslationService:
         except Exception:
             return ""
 
+    def extract_page_outline_text(self, source: Path) -> str:
+        """Read a visual PDF page when the original document has no selectable text.
+
+        The response is intentionally a short factual transcription, not a full translation.
+        It supplies real page content to the structure analyser without trying to recreate the
+        page as R Markdown at this stage.
+        """
+        if self._client is None or not source.exists():
+            return ""
+        try:
+            import base64
+
+            with open(source, "rb") as image_file:
+                encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
+            prompt = (
+                "Leia esta página de um manual técnico industrial. Retorne SOMENTE uma transcrição "
+                "concisa e factual do que realmente aparece: título visível, avisos, procedimentos, "
+                "dados técnicos e rótulos importantes. Preserve códigos, números e unidades. Não "
+                "invente conteúdo, não descreva a imagem e não acrescente comentários. Limite-se a "
+                "aproximadamente 180 palavras."
+            )
+            return self._vision_completion(prompt, encoded_image, max_tokens=360)
+        except Exception:
+            return ""
+
     def extract_structured_content(
         self,
         source: Path,

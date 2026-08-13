@@ -765,7 +765,12 @@ class MainWindow(QMainWindow):
             for page_number in page_numbers:
                 page = available_pages.get(page_number)
                 if page is not None:
-                    content.append(replace(page, export_mode="text"))
+                    extracted_text = plan.extracted_text_by_page.get(
+                        page_number, page.extracted_text
+                    )
+                    content.append(
+                        replace(page, export_mode="text", extracted_text=extracted_text)
+                    )
             return content
 
         self._sections.clear()

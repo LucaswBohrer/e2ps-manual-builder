@@ -48,6 +48,7 @@ class PdfStructurePlan:
     omitted_page_numbers: list[int] = field(default_factory=list)
     used_ai: bool = False
     note: str = ""
+    extracted_text_by_page: dict[int, str] = field(default_factory=dict)
 
 
 class ManualAIService:
@@ -157,10 +158,19 @@ class ManualAIService:
             )
 
         fallback = self._fallback_pdf_structure(source_pages, manual_title)
+        if not fallback.sections:
+            return PdfStructurePlan(
+                document_title=manual_title.strip(),
+                note=(
+                    "O PDF não forneceu texto técnico suficiente para selecionar páginas. "
+                    "Se ele for escaneado, a leitura visual da IA precisa estar configurada; "
+                    "caso contrário, importe imagens ou adicione páginas manualmente."
+                ),
+            )
         if self._client is None:
             fallback.note = (
-                "Estrutura preliminar criada pela análise local. Configure a IA para uma seleção "
-                "mais precisa do conteúdo essencial."
+                "Estrutura inicial criada a partir do texto extraído do PDF. Configure a IA para "
+                "refinar a seleção do conteúdo essencial."
             )
             return fallback
 
@@ -210,8 +220,8 @@ class ManualAIService:
             return fallback
 
         fallback.note = (
-            "A resposta da IA não continha uma estrutura com evidências verificáveis nas páginas do PDF; "
-            "foi criada uma seleção local editável baseada no texto extraído."
+            "A IA não retornou uma estrutura utilizável; a estrutura editável foi criada diretamente "
+            "a partir do conteúdo técnico detectado nas páginas do PDF."
         )
         return fallback
 
@@ -536,9 +546,9 @@ class ManualAIService:
                 selected.extend(allowed)
                 sections.append(
                     PdfStructureSection(
-                        title="Informações técnicas essenciais",
+                        title=self._local_section_title(allowed, pages),
                         page_numbers=allowed,
-                        intro="Informações operacionais e técnicas relevantes selecionadas do fabricante.",
+                        intro="Conteúdo técnico identificado diretamente nas páginas selecionadas.",
                         evidence=self._local_page_evidence(allowed, pages),
                     )
                 )
@@ -562,6 +572,29 @@ class ManualAIService:
             selected_page_numbers=sorted(selected),
             omitted_page_numbers=sorted(available - set(selected)),
         )
+
+    @staticmethod
+    def _local_section_title(page_numbers: list[int], pages: list[PdfPage]) -> str:
+        """Use a visible heading as the local section title whenever possible."""
+        selected = set(page_numbers)
+        ignored = {
+            "technical documentation", "technical manual", "manual", "contents",
+            "table of contents", "page", "notes", "notes:",
+        }
+        for page in pages:
+            if page.number not in selected:
+                continue
+            for raw_line in page.extracted_text.splitlines()[:18]:
+                line = re.sub(r"\s+", " ", raw_line).strip(" -–—:|")
+                letters = sum(character.isalpha() for character in line)
+                if (
+                    4 <= len(line) <= 90
+                    and letters >= 4
+                    and not re.fullmatch(r"[\d\W_]+", line)
+                    and line.lower() not in ignored
+                ):
+                    return line[:90]
+        return "Informações técnicas selecionadas"
 
     @staticmethod
     def _local_page_evidence(page_numbers: list[int], pages: list[PdfPage]) -> str:

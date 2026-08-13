@@ -15,6 +15,8 @@ from manual_builder.ai_service import (
 from manual_builder.main_window import MainWindow
 from manual_builder.models import ManualSection, PdfPage
 from manual_builder.project_service import ProjectExportService
+from manual_builder.translation_service import ManusTranslationService
+from manual_builder.workers import PdfStructureWorker
 
 
 def _page(number: int, text: str) -> PdfPage:
@@ -190,6 +192,65 @@ def test_pdf_plan_creates_editable_text_mode_content_in_main_window() -> None:
         app.processEvents()
 
 
+def test_scanned_pdf_pages_receive_visual_text_before_structure_analysis() -> None:
+    pages = [
+        _page(1, ""),
+        _page(2, ""),
+        _page(3, "Selectable technical content with rated current, voltage, installation torque and terminal identification. " * 5),
+    ]
+    worker = PdfStructureWorker(
+        pages,
+        "Manual",
+        "test-key",
+        "https://api.groq.com/openai/v1",
+        "llama-3.3-70b-versatile",
+    )
+    assert [page.number for page in worker._pages_needing_visual_read(pages)] == [1, 2]
+
+    original = ManusTranslationService.extract_page_outline_text
+    ManusTranslationService.extract_page_outline_text = (
+        lambda _service, source: (
+            "Safety warning: disconnect power before maintenance."
+            if source.name.endswith("_1.png")
+            else "Installation wiring and commissioning procedure."
+        )
+    )
+    try:
+        assert worker._supplement_visual_text() == 2
+    finally:
+        ManusTranslationService.extract_page_outline_text = original
+
+    assert "disconnect power" in worker._pages[0].extracted_text.lower()
+    assert "commissioning" in worker._pages[1].extracted_text.lower()
+
+    plan = ManualAIService().create_pdf_structure(worker._pages, "Manual escaneado")
+    assert plan.sections
+    assert {section.title for section in plan.sections} >= {"Segurança", "Instalação e comissionamento"}
+
+
+def test_local_selection_uses_a_real_heading_when_no_category_matches() -> None:
+    pages = [
+        _page(
+            1,
+            "GX2000 Controller Overview\n"
+            "This controller provides adjustable parameter monitoring and system communication. " * 4,
+        )
+    ]
+
+    plan = ManualAIService().create_pdf_structure(pages, "Manual do controlador")
+
+    assert plan.sections
+    assert plan.sections[0].title == "GX2000 Controller Overview"
+    assert plan.sections[0].evidence
+
+
+def test_empty_pdf_text_explains_that_visual_read_is_required() -> None:
+    plan = ManualAIService().create_pdf_structure([_page(1, "")], "Manual escaneado")
+
+    assert not plan.sections
+    assert "leitura visual" in plan.note.lower()
+
+
 def test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection() -> None:
     pages = [_page(2, "Safety warning: disconnect the equipment before maintenance.")]
     plan = PdfStructurePlan(
@@ -294,6 +355,9 @@ if __name__ == "__main__":
     test_ai_structure_parser_rejects_invalid_or_duplicate_page_references()
     test_text_outline_parser_builds_sections_with_real_page_evidence()
     test_text_outline_parser_rejects_generic_or_unmatched_titles()
+    test_scanned_pdf_pages_receive_visual_text_before_structure_analysis()
+    test_local_selection_uses_a_real_heading_when_no_category_matches()
+    test_empty_pdf_text_explains_that_visual_read_is_required()
     test_pdf_plan_creates_editable_text_mode_content_in_main_window()
     test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()
