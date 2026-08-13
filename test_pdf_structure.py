@@ -111,6 +111,41 @@ def test_ai_structure_parser_rejects_generic_sections_without_page_evidence() ->
     assert plan.selected_page_numbers == []
 
 
+def test_source_heading_structure_keeps_complete_essential_chapter_ranges() -> None:
+    pages = [
+        _page(1, "Table of contents\n2 Safety\n3 Installation\n4 Operation\n5 Maintenance\n6 Technical data"),
+        _page(2, "2\nSafety\n2.1\nImportant information\nRead the safety information before operating the pump."),
+        _page(3, "2\nSafety\n2.2\nSafety precautions\nDisconnect power before maintenance."),
+        _page(4, "3\nInstallation\n3.1\nUnpacking/delivery\nCheck the delivery and inspect the pump."),
+        _page(5, "3 Installation\n3.2 Installation\nFit the pump in the process line."),
+        _page(6, "4\nOperation\n4.1\nControls\nStart the pump and inspect the controls."),
+        _page(7, "4\nOperation\n4.2\nTroubleshooting\nCheck the fault condition before restarting."),
+        _page(8, "5 Maintenance\n5.1 General maintenance\nInspect seals and bearings."),
+        _page(9, "5 Maintenance\n5.2 Motor maintenance\nLubricate according to the motor manual."),
+        _page(10, "6 Technical data\n6.1 Technical data\nMaximum pressure and temperature limits."),
+        _page(11, "7 Parts list and service kits\nService kits are listed here."),
+    ]
+
+    plan = ManualAIService().create_pdf_structure(pages, "Bomba LKH")
+
+    assert [section.title for section in plan.sections] == [
+        "Segurança", "Instalação", "Operação", "Manutenção", "Dados técnicos", "Peças e kits de serviço"
+    ]
+    assert plan.detected_chapter_ranges["Segurança"] == [2, 3]
+    assert plan.detected_chapter_ranges["Instalação"] == [4, 5]
+    assert plan.detected_chapter_ranges["Operação"] == [6, 7]
+    assert plan.detected_chapter_ranges["Manutenção"] == [8, 9]
+    assert plan.detected_chapter_ranges["Dados técnicos"] == [10]
+    assert plan.detected_chapter_ranges["Peças e kits de serviço"] == [11]
+    assert plan.selected_page_numbers == list(range(2, 12))
+    assert 1 in plan.omitted_page_numbers
+    assert [subsection.title for subsection in plan.sections[0].subsections] == [
+        "Informações importantes", "Precauções de segurança"
+    ]
+    assert plan.sections[2].subsections[0].title == "Controles"
+    assert plan.sections[2].subsections[1].title == "Solução de problemas"
+
+
 def test_translation_cleanup_keeps_only_the_final_translated_content() -> None:
     raw = """Não há necessidade de tradução, pois o texto já está em português.
 TEXT: Safety is fundamental when working with the pump.
@@ -257,6 +292,34 @@ def test_pdf_plan_creates_editable_text_mode_content_in_main_window() -> None:
         assert subsection.content[0] == "Fixe o equipamento em superfície adequada."
         assert isinstance(subsection.content[1], PdfPage)
         assert subsection.content[1].export_mode == "text"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_window_reports_missing_pages_from_detected_chapter_coverage() -> None:
+    pages = [
+        _page(2, "2 Safety\nRead all safety instructions."),
+        _page(3, "2 Safety\nDisconnect power before maintenance."),
+    ]
+    plan = PdfStructurePlan(
+        document_title="Bomba",
+        sections=[PdfStructureSection(title="Segurança", page_numbers=[2])],
+        selected_page_numbers=[2, 3],
+        detected_chapter_ranges={"Segurança": [2, 3]},
+    )
+
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        window._pages = pages
+        window._last_pdf_structure_plan = plan
+        window._build_sections_from_pdf_plan(plan)
+        warnings = window._automatic_plan_coverage_warnings()
+        assert any("páginas técnicas reconhecidas" in warning.lower() for warning in warnings)
+        assert any("3" in warning for warning in warnings)
     finally:
         window.close()
         app.processEvents()
@@ -468,6 +531,7 @@ def test_text_mode_pdf_page_exports_as_formatted_content() -> None:
 if __name__ == "__main__":
     test_local_pdf_selection_discards_reference_content_and_keeps_technical_pages()
     test_ai_structure_parser_rejects_invalid_or_duplicate_page_references()
+    test_source_heading_structure_keeps_complete_essential_chapter_ranges()
     test_translation_cleanup_keeps_only_the_final_translated_content()
     test_rmarkdown_formatter_removes_ai_metacommentary_from_saved_text_blocks()
     test_rmarkdown_formatter_removes_duplicate_source_chapter_and_preserves_subheading()
@@ -481,6 +545,7 @@ if __name__ == "__main__":
     test_local_grouping_keeps_related_pages_and_uses_source_backed_intro()
     test_empty_pdf_text_explains_that_visual_read_is_required()
     test_pdf_plan_creates_editable_text_mode_content_in_main_window()
+    test_window_reports_missing_pages_from_detected_chapter_coverage()
     test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()
     test_text_mode_pdf_page_exports_as_formatted_content()

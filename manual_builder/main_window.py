@@ -694,11 +694,18 @@ class MainWindow(QMainWindow):
         selected_count = len(plan.selected_page_numbers)
         omitted_count = len(plan.omitted_page_numbers)
         mode = "IA" if plan.used_ai else "análise local"
-        summary = (
-            f"Foram criadas {created_sections} seção(ões) editáveis com {selected_count} página(s) "
-            f"técnicas selecionadas pela {mode}. {omitted_count} página(s) de capa, referência, "
-            "marketing, duplicidade ou conteúdo não operacional foram deixadas de fora."
-        )
+        if plan.detected_chapter_ranges:
+            summary = (
+                f"Foram criadas {created_sections} seção(ões) editáveis por cobertura contínua, com "
+                f"{selected_count} página(s) técnicas agrupadas pelos capítulos e subtítulos do PDF. "
+                f"{omitted_count} página(s) fora do escopo operacional foram deixadas de fora."
+            )
+        else:
+            summary = (
+                f"Foram criadas {created_sections} seção(ões) editáveis com {selected_count} página(s) "
+                f"técnicas selecionadas pela {mode}. {omitted_count} página(s) de capa, referência, "
+                "marketing, duplicidade ou conteúdo não operacional foram deixadas de fora."
+            )
         if plan.note:
             summary += " " + plan.note
         self.chat_display.append(
@@ -742,6 +749,20 @@ class MainWindow(QMainWindow):
                         f"Evidência: “{escape(subsection.evidence)}”</span>"
                     )
                 lines.append(sub_label)
+        if plan.detected_chapter_ranges:
+            ranges = "; ".join(
+                f"{escape(title)}: páginas {escape(', '.join(str(number) for number in numbers))}"
+                for title, numbers in plan.detected_chapter_ranges.items()
+            )
+            lines.append(
+                "<span style='color:#1D4ED8'><b>Cobertura contínua detectada:</b> "
+                f"{ranges}</span>"
+            )
+        if plan.coverage_warnings:
+            lines.extend(
+                f"<span style='color:#B45309'>Atenção: {escape(warning)}</span>"
+                for warning in plan.coverage_warnings
+            )
         return "<br><br><b>Seleção verificável no PDF:</b><br>" + "<br>".join(lines) if lines else ""
 
     def _build_sections_from_pdf_plan(self, plan: PdfStructurePlan) -> int:
@@ -978,6 +999,64 @@ class MainWindow(QMainWindow):
         item.setData(Qt.ItemDataRole.UserRole, new_page)
         self.statusBar().showMessage(f"Página {page.number} configurada para exportação como {new_mode}.")
 
+    def _automatic_plan_coverage_warnings(self) -> list[str]:
+        """Compare the current editable manual with the ranges recognized from the PDF source."""
+        plan = self._last_pdf_structure_plan
+        if plan is None or not plan.detected_chapter_ranges:
+            return list(plan.coverage_warnings) if plan is not None else []
+
+        assigned_pages: set[int] = set()
+        current_titles: set[str] = set()
+        for section in self._sections:
+            current_titles.add(section.title.strip())
+            for content in section.content:
+                if isinstance(content, PdfPage):
+                    assigned_pages.add(content.number)
+            for subsection in section.subsections:
+                for content in subsection.content:
+                    if isinstance(content, PdfPage):
+                        assigned_pages.add(content.number)
+
+        warnings = list(plan.coverage_warnings)
+        missing_sections = [
+            title for title in plan.detected_chapter_ranges if title not in current_titles
+        ]
+        if missing_sections:
+            warnings.append(
+                "Capítulos detectados na fonte não estão mais na estrutura atual: "
+                + ", ".join(missing_sections) + "."
+            )
+
+        missing_pages: list[int] = []
+        for page_numbers in plan.detected_chapter_ranges.values():
+            missing_pages.extend(number for number in page_numbers if number not in assigned_pages)
+        if missing_pages:
+            formatted = ", ".join(str(number) for number in sorted(set(missing_pages))[:18])
+            suffix = "…" if len(set(missing_pages)) > 18 else ""
+            warnings.append(
+                "Páginas técnicas reconhecidas ainda não foram associadas a uma seção: "
+                f"{formatted}{suffix}."
+            )
+        return list(dict.fromkeys(warnings))
+
+    def _confirm_export_coverage(self) -> bool:
+        """Require an explicit user choice when source-backed coverage is incomplete."""
+        warnings = self._automatic_plan_coverage_warnings()
+        if not warnings:
+            return True
+        detail = "\n\n".join(f"• {warning}" for warning in warnings)
+        answer = QMessageBox.warning(
+            self,
+            "Revisão de cobertura necessária",
+            "A análise do PDF identificou uma possível lacuna no manual que será exportado:\n\n"
+            f"{detail}\n\n"
+            "Escolha 'Sim' somente se esta for uma exclusão intencional. Escolha 'Não' para "
+            "revisar a árvore de seções e as páginas associadas.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
     def export_project(self) -> None:
         """Validate input and start multilingual background export."""
         languages = self._selected_languages()
@@ -986,6 +1065,9 @@ class MainWindow(QMainWindow):
             return
         if not self._sections:
             QMessageBox.warning(self, "Sections required", "Create at least one section before exporting.")
+            return
+        if not self._confirm_export_coverage():
+            self.statusBar().showMessage("Exportação cancelada para revisão da cobertura técnica.", 7000)
             return
 
         source_language = self.source_language.currentData()

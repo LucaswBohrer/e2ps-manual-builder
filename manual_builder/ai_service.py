@@ -49,6 +49,8 @@ class PdfStructurePlan:
     used_ai: bool = False
     note: str = ""
     extracted_text_by_page: dict[int, str] = field(default_factory=dict)
+    detected_chapter_ranges: dict[str, list[int]] = field(default_factory=dict)
+    coverage_warnings: list[str] = field(default_factory=list)
 
 
 class ManualAIService:
@@ -140,6 +142,222 @@ class ManualAIService:
                 lines.append(f"  - {subsection.title} — páginas {sub_pages}.{sub_evidence}")
         return "\n".join(lines)
 
+    _SOURCE_CHAPTERS: tuple[tuple[int, str, tuple[str, ...]], ...] = (
+        (1, "Informações gerais", ("general information", "introduction", "informações gerais", "informacion general")),
+        (2, "Segurança", ("safety", "segurança", "seguridad")),
+        (3, "Instalação", ("installation", "instalação", "instalacion")),
+        (4, "Operação", ("operation", "operação", "operacion")),
+        (5, "Manutenção", ("maintenance", "manutenção", "mantenimiento")),
+        (6, "Dados técnicos", ("technical data", "dados técnicos", "datos técnicos")),
+        (7, "Peças e kits de serviço", ("parts list and service kits", "service kits", "lista de peças", "lista de piezas")),
+    )
+    _ESSENTIAL_CHAPTER_NUMBERS = frozenset({2, 3, 4, 5, 6, 7})
+    _SUBSECTION_TITLES = {
+        "important information": "Informações importantes",
+        "warning signs": "Sinais de advertência",
+        "safety precautions": "Precauções de segurança",
+        "unpacking/delivery": "Desembalagem e entrega",
+        "unpacking delivery": "Desembalagem e entrega",
+        "installation": "Instalação",
+        "pre-use check - pump without impeller screw": "Verificação antes do uso — bomba sem parafuso do impulsor",
+        "pre-use check - pump with impeller screw": "Verificação antes do uso — bomba com parafuso do impulsor",
+        "recycling information": "Informações de reciclagem",
+        "operation/control": "Operação e controle",
+        "controls": "Controles",
+        "trouble shooting": "Solução de problemas",
+        "troubleshooting": "Solução de problemas",
+        "recommended cleaning": "Limpeza recomendada",
+        "general maintenance": "Manutenção geral",
+        "cleaning procedure": "Procedimento de limpeza",
+        "dismantling of pump/shaft seals": "Desmontagem da bomba e das vedações do eixo",
+        "assembly of pump/single shaft seal": "Montagem da bomba com vedação simples do eixo",
+        "assembly of pump/flushed shaft seal": "Montagem da bomba com vedação do eixo lavada",
+        "assembly of pump/double mechanical shaft seal": "Montagem da bomba com vedação mecânica dupla",
+        "adjustment of shaft (lkh-5)": "Ajuste do eixo (LKH-5)",
+        "adjustment of shaft (lkh-10 to -90)": "Ajuste do eixo (LKH-10 a -90)",
+        "motor maintenance": "Manutenção do motor",
+        "technical data": "Dados técnicos",
+        "relubrication intervals": "Intervalos de relubrificação",
+        "torque specifications": "Especificações de torque",
+        "materials": "Materiais",
+        "weight": "Peso",
+        "weight (kg)": "Peso (kg)",
+        "noise": "Ruído",
+        "noise emission": "Emissão de ruído",
+        "lkh-5 sanitary version": "LKH-5 — versão sanitária",
+        "lkh-10, -15, -20, -25, -35, -40, -50, -60, -70, -75, -85, -90 sanitary version": "LKH-10 a -90 — versão sanitária",
+        "lkh - product wetted parts": "LKH — peças em contato com o produto",
+        "lkh - motor-dependent parts": "LKH — peças dependentes do motor",
+        "lkh - shaft seal": "LKH — vedação do eixo",
+    }
+
+    @staticmethod
+    def _normalised_heading(value: str) -> str:
+        """Normalize a source heading without losing the original text used as evidence."""
+        return re.sub(r"\s+", " ", value or "").strip(" .:;-–—").lower()
+
+    @classmethod
+    def _chapter_heading_on_page(cls, page: PdfPage) -> tuple[int, str] | None:
+        """Recognize a manufacturer chapter heading near the beginning of a page.
+
+        PyMuPDF commonly returns the chapter number and its title in separate lines, so
+        both ``2 Safety`` and the two-line form ``2`` / ``Safety`` are supported.
+        The small window prevents a reference to another chapter in the body text from
+        becoming a false chapter boundary.
+        """
+        lines = [
+            re.sub(r"\s+", " ", raw_line).strip(" .:;-–—")
+            for raw_line in page.extracted_text.splitlines()[:14]
+        ]
+        lines = [line for line in lines if line]
+        for index, line in enumerate(lines):
+            match = re.fullmatch(r"(\d{1,2})(?:\s+(.{3,100}))?", line)
+            if not match:
+                continue
+            number = int(match.group(1))
+            candidate = match.group(2) or (lines[index + 1] if index + 1 < len(lines) else "")
+            heading = cls._normalised_heading(candidate)
+            for chapter_number, title, aliases in cls._SOURCE_CHAPTERS:
+                if number == chapter_number and any(
+                    heading == alias or heading.startswith(f"{alias} ") for alias in aliases
+                ):
+                    return chapter_number, title
+        return None
+
+    @classmethod
+    def _subsection_heading_on_page(
+        cls, page: PdfPage, chapter_number: int
+    ) -> str | None:
+        """Recognize a numbered subsection title and translate known technical labels."""
+        lines = [
+            re.sub(r"\s+", " ", raw_line).strip(" .:;-–—")
+            for raw_line in page.extracted_text.splitlines()[:42]
+        ]
+        lines = [line for line in lines if line]
+        for index, line in enumerate(lines):
+            match = re.fullmatch(r"(\d{1,2})\.(\d{1,2})(?:\.\d+)?(?:\s+(.{3,100}))?", line)
+            if not match or int(match.group(1)) != chapter_number:
+                continue
+            raw_title = re.sub(
+                r"\s+", " ", match.group(3) or (lines[index + 1] if index + 1 < len(lines) else "")
+            ).strip()
+            if not raw_title:
+                continue
+            normalized = cls._normalised_heading(raw_title)
+            return cls._SUBSECTION_TITLES.get(normalized, raw_title)
+        return None
+
+    @staticmethod
+    def _is_non_operational_page(page: PdfPage) -> bool:
+        """Exclude only clear front-matter/legal pages from source-driven coverage."""
+        text = re.sub(r"\s+", " ", page.extracted_text).lower()
+        excluded_terms = (
+            "table of contents", "copyright", "all rights reserved", "declaration of conformity",
+            "declaration of incorporation", "certificate of conformity", "revision history",
+        )
+        return any(term in text for term in excluded_terms)
+
+    def _source_heading_structure(
+        self, pages: list[PdfPage], manual_title: str
+    ) -> PdfStructurePlan:
+        """Build an auditable, complete outline from chapter and subsection boundaries.
+
+        This path is intentionally deterministic.  When a manufacturer PDF supplies reliable
+        numbered headings, those headings are stronger evidence than a model choosing a single
+        representative page.  Each detected chapter keeps its full continuous page interval,
+        while numbered subsections split that interval into editable groups.
+        """
+        ordered_pages = sorted(pages, key=lambda page: page.number)
+        chapter_starts: list[tuple[int, int, str]] = []
+        for index, page in enumerate(ordered_pages):
+            if self._is_non_operational_page(page):
+                continue
+            heading = self._chapter_heading_on_page(page)
+            if heading is None:
+                continue
+            number, title = heading
+            if not chapter_starts or chapter_starts[-1][1] != number:
+                chapter_starts.append((index, number, title))
+
+        if not chapter_starts:
+            return PdfStructurePlan(document_title=manual_title.strip())
+
+        sections: list[PdfStructureSection] = []
+        selected: list[int] = []
+        detected_ranges: dict[str, list[int]] = {}
+        for chapter_index, (start_index, chapter_number, chapter_title) in enumerate(chapter_starts):
+            end_index = (
+                chapter_starts[chapter_index + 1][0]
+                if chapter_index + 1 < len(chapter_starts)
+                else len(ordered_pages)
+            )
+            chapter_pages = [
+                page for page in ordered_pages[start_index:end_index]
+                if page.extracted_text.strip() and not self._is_non_operational_page(page)
+            ]
+            if not chapter_pages:
+                continue
+
+            subsection_starts: list[tuple[int, str]] = []
+            for relative_index, page in enumerate(chapter_pages):
+                subsection_title = self._subsection_heading_on_page(page, chapter_number)
+                if subsection_title and (
+                    not subsection_starts or subsection_starts[-1][1] != subsection_title
+                ):
+                    subsection_starts.append((relative_index, subsection_title))
+
+            direct_pages = chapter_pages[: subsection_starts[0][0]] if subsection_starts else chapter_pages
+            subsections: list[PdfStructureSubsection] = []
+            for subsection_index, (sub_start, subsection_title) in enumerate(subsection_starts):
+                sub_end = (
+                    subsection_starts[subsection_index + 1][0]
+                    if subsection_index + 1 < len(subsection_starts)
+                    else len(chapter_pages)
+                )
+                subsection_pages = chapter_pages[sub_start:sub_end]
+                numbers = [page.number for page in subsection_pages]
+                if not numbers:
+                    continue
+                subsections.append(
+                    PdfStructureSubsection(
+                        title=subsection_title,
+                        page_numbers=numbers,
+                        intro="",
+                        evidence=self._local_page_evidence(numbers, ordered_pages),
+                    )
+                )
+
+            direct_numbers = [page.number for page in direct_pages]
+            all_numbers = [page.number for page in chapter_pages]
+            if chapter_number not in self._ESSENTIAL_CHAPTER_NUMBERS:
+                continue
+            selected.extend(all_numbers)
+            detected_ranges[chapter_title] = all_numbers
+            sections.append(
+                PdfStructureSection(
+                    title=chapter_title,
+                    page_numbers=direct_numbers,
+                    intro="",
+                    evidence=self._local_page_evidence(direct_numbers or all_numbers, ordered_pages),
+                    subsections=subsections,
+                )
+            )
+
+        available = {page.number for page in ordered_pages}
+        selected = sorted(dict.fromkeys(selected))
+        return PdfStructurePlan(
+            document_title=manual_title.strip(),
+            sections=sections,
+            selected_page_numbers=selected,
+            omitted_page_numbers=sorted(available - set(selected)),
+            detected_chapter_ranges=detected_ranges,
+            note=(
+                "Estrutura de cobertura criada a partir dos capítulos e subtítulos numerados "
+                "detectados no PDF. Cada capítulo manteve o intervalo contínuo de páginas entre "
+                "seu título e o próximo capítulo."
+            ) if sections else "",
+        )
+
     def create_pdf_structure(self, pages: list[PdfPage], manual_title: str) -> PdfStructurePlan:
         """Create a compact E2PS outline, selecting only useful manufacturer-PDF content.
 
@@ -156,6 +374,10 @@ class ManualAIService:
                 document_title=manual_title.strip(),
                 note="Não há páginas de PDF disponíveis para análise automática.",
             )
+
+        source_outline = self._source_heading_structure(source_pages, manual_title)
+        if source_outline.sections:
+            return source_outline
 
         fallback = self._fallback_pdf_structure(source_pages, manual_title)
         if not fallback.sections:
