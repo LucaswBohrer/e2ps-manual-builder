@@ -109,6 +109,46 @@ def test_ai_structure_parser_rejects_generic_sections_without_page_evidence() ->
     assert plan.selected_page_numbers == []
 
 
+def test_text_outline_parser_builds_sections_with_real_page_evidence() -> None:
+    pages = [
+        _page(2, "Safety warning: disconnect the equipment before maintenance."),
+        _page(3, "Installation and wiring instructions for the control cabinet."),
+        _page(4, "Table of contents and document references."),
+    ]
+    raw = """
+    1. Segurança — páginas 2
+    2. Instalação e ligação — páginas 3
+    3. Referências — páginas 4
+    """
+
+    plan = ManualAIService()._parse_pdf_structure(raw, pages, "Painel de controle")
+
+    assert [section.title for section in plan.sections] == ["Segurança", "Instalação e ligação"]
+    assert plan.selected_page_numbers == [2, 3]
+    assert "disconnect the equipment" in plan.sections[0].evidence
+    assert "installation and wiring" in plan.sections[1].evidence
+    assert 4 in plan.omitted_page_numbers
+
+    markdown_plan = ManualAIService()._parse_pdf_structure(
+        "### **Segurança** — pág. 2\n- **Instalação e ligação** — páginas 3",
+        pages,
+        "Painel de controle",
+    )
+    assert [section.page_numbers for section in markdown_plan.sections] == [[2], [3]]
+    assert all(section.evidence for section in markdown_plan.sections)
+
+
+def test_text_outline_parser_rejects_generic_or_unmatched_titles() -> None:
+    pages = [_page(2, "Safety warning: disconnect the equipment before maintenance.")]
+
+    plan = ManualAIService()._parse_pdf_structure(
+        "1. Introdução geral — páginas 2", pages, "Painel de controle"
+    )
+
+    assert plan.sections == []
+    assert plan.selected_page_numbers == []
+
+
 def test_pdf_plan_creates_editable_text_mode_content_in_main_window() -> None:
     pages = [_page(2, "Safety"), _page(3, "Installation")]
     plan = PdfStructurePlan(
@@ -252,6 +292,8 @@ def test_text_mode_pdf_page_exports_as_formatted_content() -> None:
 if __name__ == "__main__":
     test_local_pdf_selection_discards_reference_content_and_keeps_technical_pages()
     test_ai_structure_parser_rejects_invalid_or_duplicate_page_references()
+    test_text_outline_parser_builds_sections_with_real_page_evidence()
+    test_text_outline_parser_rejects_generic_or_unmatched_titles()
     test_pdf_plan_creates_editable_text_mode_content_in_main_window()
     test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection()
     test_rmarkdown_formatter_creates_tables_and_normalizes_lists()

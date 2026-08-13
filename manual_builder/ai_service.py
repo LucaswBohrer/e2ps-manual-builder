@@ -172,13 +172,15 @@ class ManualAIService:
             "declarações legais, revisões, páginas repetidas e material de referência não operacional. "
             "Priorize segurança, instalação/comissionamento, operação, manutenção/diagnóstico e dados "
             "técnicos indispensáveis. Se uma categoria não estiver presente, não a invente.\n\n"
-            "Retorne APENAS JSON válido, sem Markdown, neste formato:\n"
+            "Prefira retornar JSON válido, sem Markdown, neste formato:\n"
             '{"document_title":"...","sections":[{"title":"...","intro":"máximo duas frases em português","evidence":"trecho literal de pelo menos 12 caracteres extraído de uma página selecionada","pages":[1],"subsections":[{"title":"...","intro":"...","evidence":"trecho literal da página","pages":[2]}]}]}\n\n'
             "Regras obrigatórias: no máximo 8 seções; cada página aparece no máximo uma vez; escolha "
             "apenas páginas realmente necessárias; use somente números das páginas fornecidas; cada grupo "
             "com páginas deve conter evidence, uma citação literal verificável de uma das suas próprias "
             "páginas. Não use títulos genéricos como Introdução, Descrição Técnica ou Referências se não "
-            "houver evidência explícita. Textos de introdução não podem criar especificações não existentes.\n\n"
+            "houver evidência explícita. Textos de introdução não podem criar especificações não existentes. "
+            "Se não conseguir retornar JSON, responda somente com uma lista estruturada: `1. Título — páginas 3-4`, "
+            "uma seção por linha, usando exclusivamente páginas fornecidas.\n\n"
             f"Título informado: {manual_title or 'Manual técnico'}\n\nPáginas extraídas:\n{context}"
         )
         try:
@@ -187,7 +189,7 @@ class ManualAIService:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Return strict JSON only. Never include reasoning, commentary or code fences.",
+                        "content": "Prefer strict JSON only. If JSON is unavailable, return only a numbered outline with exact page numbers and no commentary.",
                     },
                     {"role": "user", "content": prompt},
                 ],
@@ -262,7 +264,19 @@ class ManualAIService:
         manual_title: str,
     ) -> PdfStructurePlan:
         """Validate model JSON and convert it to a safe, de-duplicated page plan."""
-        payload = json.loads(self._clean_model_output(raw))
+        try:
+            payload = json.loads(self._clean_model_output(raw))
+        except (TypeError, json.JSONDecodeError):
+            return self._parse_pdf_structure_text(raw, pages, manual_title)
+        return self._parse_pdf_payload(payload, pages, manual_title)
+
+    def _parse_pdf_payload(
+        self,
+        payload: object,
+        pages: list[PdfPage],
+        manual_title: str,
+    ) -> PdfStructurePlan:
+        """Validate a JSON payload and convert it to a safe, de-duplicated page plan."""
         available = {page.number for page in pages}
         page_texts = {
             page.number: re.sub(r"\s+", " ", page.extracted_text.lower()).strip()
@@ -333,6 +347,116 @@ class ManualAIService:
             sections=sections,
             selected_page_numbers=selected,
             omitted_page_numbers=sorted(available - set(selected)),
+        )
+
+    @staticmethod
+    def _page_numbers_from_text(value: str, available: set[int]) -> list[int]:
+        """Read explicit page numbers and short numeric ranges from a textual outline."""
+        selected: list[int] = []
+        for start_text, end_text in re.findall(r"(\d+)(?:\s*[-–]\s*(\d+))?", value):
+            start = int(start_text)
+            end = int(end_text) if end_text else start
+            if end < start or end - start > 40:
+                end = start
+            for page_number in range(start, end + 1):
+                if page_number in available and page_number not in selected:
+                    selected.append(page_number)
+        return selected
+
+    @staticmethod
+    def _literal_evidence(page_numbers: list[int], page_texts: dict[int, str]) -> str:
+        """Pick a visible text fragment from selected PDF pages for auditable fallback evidence."""
+        for page_number in page_numbers:
+            text = re.sub(r"\s+", " ", page_texts.get(page_number, "")).strip()
+            if len(text) < 12:
+                continue
+            sentences = re.split(r"(?<=[.!?])\s+", text)
+            for sentence in sentences:
+                if len(sentence) >= 12 and len(re.findall(r"[a-zà-ÿ0-9]", sentence.lower())) >= 8:
+                    return sentence[:240].rstrip()
+            return text[:240].rstrip()
+        return ""
+
+    @staticmethod
+    def _title_matches_pages(title: str, page_numbers: list[int], page_texts: dict[int, str]) -> bool:
+        """Reject generic headings unless their topic is supported by the selected page text."""
+        combined_text = " ".join(page_texts.get(number, "") for number in page_numbers).lower()
+        normalized_title = re.sub(r"[^a-zà-ÿ0-9 ]", " ", title.lower())
+        title_tokens = {
+            token for token in re.findall(r"[a-zà-ÿ0-9]{4,}", normalized_title)
+            if token not in {"manual", "técnico", "tecnica", "geral", "sistema", "seção", "secao"}
+        }
+        if title_tokens and any(token in combined_text for token in title_tokens):
+            return True
+        topic_terms = {
+            "seguran": ("safety", "warning", "danger", "caution", "seguran", "aviso"),
+            "instal": ("install", "mount", "wiring", "commission", "instal"),
+            "opera": ("operation", "operat", "start", "control", "operaç"),
+            "manuten": ("maintenance", "maintain", "service", "manuten"),
+            "diagn": ("troubleshoot", "fault", "diagnostic", "erro", "falha"),
+            "dados": ("technical data", "specification", "rating", "voltage", "current", "dados técnicos"),
+        }
+        return any(
+            title_key in normalized_title and any(term in combined_text for term in required_terms)
+            for title_key, required_terms in topic_terms.items()
+        )
+
+    def _parse_pdf_structure_text(
+        self,
+        raw: str,
+        pages: list[PdfPage],
+        manual_title: str,
+    ) -> PdfStructurePlan:
+        """Convert a numbered or Markdown outline into a verified PDF structure.
+
+        Some providers answer in prose despite JSON instructions.  This parser only accepts lines
+        that name existing pages, have a supported title and can be tied to literal page text.
+        """
+        available = {page.number for page in pages}
+        page_texts = {
+            page.number: re.sub(r"\s+", " ", page.extracted_text.lower()).strip()
+            for page in pages
+        }
+        pattern = re.compile(
+            r"(?im)^\s*(?:#{1,6}\s*|\d+[.)]\s*|[-*+]\s*)?"
+            r"(?:\*\*)?\s*([^*\n(]{3,100}?)\s*(?:\*\*)?\s*"
+            r"(?:[-–—:]\s*)?\(?\s*(?:p[aá]g\.?(?:ina|inas)?|pages?)\s*[:#]?\s*"
+            r"([0-9][0-9, \t\-–]*)\)?",
+        )
+        matches = list(pattern.finditer(raw or ""))
+        used: set[int] = set()
+        sections: list[PdfStructureSection] = []
+        for index, match in enumerate(matches[:12]):
+            title = self._compact_text(re.sub(r"\s+", " ", match.group(1)), 90).strip(" -–—:.")
+            candidate_pages = self._page_numbers_from_text(match.group(2), available)
+            candidate_pages = [number for number in candidate_pages if number not in used]
+            if not title or not candidate_pages or not self._title_matches_pages(title, candidate_pages, page_texts):
+                continue
+            detail_end = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
+            detail = raw[match.end():detail_end]
+            evidence_match = re.search(
+                r"(?:evid[eê]ncia|trecho|cita[cç][aã]o)\s*[:\-]\s*[\"“']?(.{12,260})",
+                detail,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            evidence = self._compact_text(evidence_match.group(1), 240) if evidence_match else ""
+            if not self._evidence_matches_pages(evidence, candidate_pages, page_texts):
+                evidence = self._literal_evidence(candidate_pages, page_texts)
+            if not self._evidence_matches_pages(evidence, candidate_pages, page_texts):
+                continue
+            used.update(candidate_pages)
+            sections.append(
+                PdfStructureSection(
+                    title=title,
+                    page_numbers=candidate_pages,
+                    evidence=evidence,
+                )
+            )
+        return PdfStructurePlan(
+            document_title=manual_title.strip(),
+            sections=sections,
+            selected_page_numbers=sorted(used),
+            omitted_page_numbers=sorted(available - used),
         )
 
     @staticmethod
