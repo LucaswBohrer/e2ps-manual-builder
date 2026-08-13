@@ -210,6 +210,12 @@ def test_structured_translation_splits_dense_source_text_on_safe_boundaries() ->
     assert "procedimento de manutenção" in "\n".join(chunks)
 
 
+def test_groq_rate_limit_is_detected_and_the_retry_hint_is_parsed() -> None:
+    error = "Error code: 429 - rate_limit_exceeded. Please try again in 11m 13.92s."
+    assert ManusTranslationService._is_rate_limit_error(error)
+    assert 673.0 <= ManusTranslationService._retry_delay_from_error(error) <= 674.0
+
+
 def test_structured_translation_prioritizes_original_pdf_text_before_visual_reading() -> None:
     service = ManusTranslationService("en", api_key="test-key")
     service._client = object()
@@ -750,6 +756,7 @@ if __name__ == "__main__":
     test_rmarkdown_formatter_removes_duplicate_source_chapter_and_preserves_subheading()
     test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line()
     test_structured_translation_splits_dense_source_text_on_safe_boundaries()
+    test_groq_rate_limit_is_detected_and_the_retry_hint_is_parsed()
     test_structured_translation_prioritizes_original_pdf_text_before_visual_reading()
     test_layout_detection_routes_repeated_or_collapsed_pdf_text_to_visual_reading()
     test_text_outline_parser_builds_sections_with_real_page_evidence()

@@ -64,6 +64,13 @@ class ManusTranslationService:
         resolved_base = endpoint or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
         self._endpoint = resolved_base.lower()
         self._last_error = ""
+        # O plano gratuito da Groq possui uma janela pequena de tokens. A exportação de
+        # um manual pode conter dezenas de páginas; espaçar e orçar as chamadas evita
+        # que uma página no meio do processo esgote a janela para as demais.
+        self._request_history: list[tuple[float, int]] = []
+        self._minimum_request_interval = 8.0
+        self._rolling_token_budget = 6_000
+        self._last_request_at = 0.0
         if OpenAI is not None:
             # Limita cada solicitação remota para que uma falha/problema no provedor
             # não mantenha o trabalhador de exportação bloqueado indefinidamente.
@@ -160,6 +167,47 @@ class ManusTranslationService:
         cleaned = "\n".join(retained_lines).strip()
         return cleaned
 
+    @staticmethod
+    def _is_rate_limit_error(error: str) -> bool:
+        lowered = (error or "").lower()
+        return "rate_limit" in lowered or "rate limit" in lowered or "429" in lowered or "tokens per" in lowered
+
+    @staticmethod
+    def _retry_delay_from_error(error: str) -> float:
+        """Read Groq's optional 'try again in Xm Ys' hint without blocking for hours."""
+        match = re.search(r"try again in\s*(?:(\d+(?:\.\d+)?)m)?\s*(?:(\d+(?:\.\d+)?)s)?", error or "", re.I)
+        if not match:
+            return 10.0
+        minutes = float(match.group(1) or 0)
+        seconds = float(match.group(2) or 0)
+        return max(2.0, minutes * 60 + seconds)
+
+    def _wait_for_request_budget(self, max_tokens: int) -> None:
+        """Pace Groq requests before issuing them instead of discovering limits mid-export."""
+        now = time.monotonic()
+        self._request_history = [
+            (timestamp, tokens)
+            for timestamp, tokens in self._request_history
+            if now - timestamp < 60.0
+        ]
+        interval_wait = self._minimum_request_interval - (now - self._last_request_at)
+        used_tokens = sum(tokens for _, tokens in self._request_history)
+        budget_wait = 0.0
+        if self._request_history and used_tokens + max_tokens > self._rolling_token_budget:
+            oldest_timestamp = self._request_history[0][0]
+            budget_wait = max(0.0, 60.0 - (now - oldest_timestamp))
+        wait_seconds = max(0.0, interval_wait, budget_wait)
+        if wait_seconds:
+            time.sleep(wait_seconds)
+        now = time.monotonic()
+        self._request_history = [
+            (timestamp, tokens)
+            for timestamp, tokens in self._request_history
+            if now - timestamp < 60.0
+        ]
+        self._request_history.append((now, max_tokens))
+        self._last_request_at = now
+
     def _completion_with_retries(
         self,
         *,
@@ -174,6 +222,7 @@ class ManusTranslationService:
 
         self._last_error = ""
         for attempt in range(attempts):
+            self._wait_for_request_budget(max_tokens)
             try:
                 response = self._client.chat.completions.create(
                     model=model,
@@ -188,10 +237,17 @@ class ManusTranslationService:
                 self._last_error = "A IA retornou uma resposta vazia."
             except Exception as error:
                 self._last_error = str(error)
-                # TPM/429 e instabilidades momentâneas são comuns em planos gratuitos.
-                # Uma espera curta permite que a página seja recuperada sem rebaixá-la a imagem.
+                if self._is_rate_limit_error(self._last_error):
+                    # Não tente outro modelo nem repita imediatamente: as duas ações só
+                    # gastam mais tokens na mesma janela. A exportação poderá ser retomada
+                    # quando a espera indicada pelo provedor for curta.
+                    delay = self._retry_delay_from_error(self._last_error)
+                    if attempt + 1 < attempts and delay <= 20.0:
+                        time.sleep(delay)
+                        continue
+                    break
                 if attempt + 1 < attempts:
-                    time.sleep(4.0)
+                    time.sleep(3.0)
         return ""
 
     @staticmethod
@@ -236,6 +292,8 @@ class ManusTranslationService:
                 return content
             if self._last_error:
                 errors.append(self._last_error)
+                if self._is_rate_limit_error(self._last_error):
+                    break
         self._last_error = " | ".join(dict.fromkeys(errors))
         return ""
 
@@ -273,7 +331,7 @@ class ManusTranslationService:
         target.write_bytes(source.read_bytes())
 
     @staticmethod
-    def _source_text_chunks(source_text: str, maximum_characters: int = 4200) -> list[str]:
+    def _source_text_chunks(source_text: str, maximum_characters: int = 1800) -> list[str]:
         """Split dense extracted pages on line boundaries before an AI translation request.
 
         A page with tables can contain enough extracted characters to exceed Groq's per-request
@@ -331,7 +389,7 @@ class ManusTranslationService:
                 translated = self._completion_with_retries(
                     model=self._model,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=1400,
+                    max_tokens=650,
                     attempts=2,
                 )
                 if translated:
@@ -427,7 +485,7 @@ class ManusTranslationService:
                 "Retorne somente o Markdown final, sem explicações, comentários, texto-fonte ecoado, rótulos "
                 "como `TEXT:` ou `Tradução:`, nem blocos <think>."
             )
-            response_text = self._vision_completion(prompt, encoded_string, max_tokens=2200)
+            response_text = self._vision_completion(prompt, encoded_string, max_tokens=900)
             structured = self._clean_model_output(response_text)
             if structured:
                 return structured
