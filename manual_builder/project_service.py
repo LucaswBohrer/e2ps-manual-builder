@@ -371,10 +371,17 @@ class ProjectExportService:
                         item.extracted_text,
                     )
                     if not structured_text.strip():
+                        provider_detail = str(getattr(translator, "last_error", "") or "").strip()
+                        detail_message = (
+                            f" Detalhe retornado pela GroqCloud: {provider_detail}"
+                            if provider_detail
+                            else ""
+                        )
                         raise TranslationError(
                             f"Não foi possível extrair o texto da página {item.number}. "
                             "A exportação foi interrompida para não incluir esta página em inglês como imagem. "
-                            "Verifique a conexão/modelo de visão GroqCloud e tente novamente."
+                            "O programa tentou novamente com uma imagem otimizada; verifique a conexão ou "
+                            f"o modelo de visão GroqCloud e tente exportar outra vez.{detail_message}"
                         )
 
                 keep_as_image = structured_text.strip() == "[[KEEP_AS_IMAGE]]"

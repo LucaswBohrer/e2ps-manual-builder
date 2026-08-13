@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import os
 import re
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -60,6 +63,7 @@ class ManusTranslationService:
         resolved_key = api_key or os.getenv("OPENAI_API_KEY", "sandbox-key")
         resolved_base = endpoint or os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
         self._endpoint = resolved_base.lower()
+        self._last_error = ""
         if OpenAI is not None:
             # Limita cada solicitação remota para que uma falha/problema no provedor
             # não mantenha o trabalhador de exportação bloqueado indefinidamente.
@@ -71,6 +75,11 @@ class ManusTranslationService:
             )
         else:
             self._client = None
+
+    @property
+    def last_error(self) -> str:
+        """Return the last recoverable provider failure for a user-facing export message."""
+        return self._last_error
 
     def _vision_model_candidates(self) -> list[str]:
         """Return compatible vision models, prioritizing native Groq options."""
@@ -151,8 +160,60 @@ class ManusTranslationService:
         cleaned = "\n".join(retained_lines).strip()
         return cleaned
 
+    def _completion_with_retries(
+        self,
+        *,
+        model: str,
+        messages: list[dict],
+        max_tokens: int,
+        attempts: int = 2,
+    ) -> str:
+        """Request a completion with a bounded retry for transient Groq limits/timeouts."""
+        if self._client is None:
+            return ""
+
+        self._last_error = ""
+        for attempt in range(attempts):
+            try:
+                response = self._client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=max_tokens,
+                    timeout=35.0,
+                )
+                content = self._clean_model_output(response.choices[0].message.content)
+                if content:
+                    return content
+                self._last_error = "A IA retornou uma resposta vazia."
+            except Exception as error:
+                self._last_error = str(error)
+                # TPM/429 e instabilidades momentâneas são comuns em planos gratuitos.
+                # Uma espera curta permite que a página seja recuperada sem rebaixá-la a imagem.
+                if attempt + 1 < attempts:
+                    time.sleep(4.0)
+        return ""
+
+    @staticmethod
+    def _encode_image_for_vision(source: Path) -> str:
+        """Encode a readable but bounded page image for Groq Vision.
+
+        Rendered PDF pages can be unnecessarily large.  Downscaling them before base64 encoding
+        prevents an otherwise readable page from being rejected because the image request exceeds
+        the provider's input/token allowance.
+        """
+        if Image is None:
+            return base64.b64encode(source.read_bytes()).decode("utf-8")
+
+        with Image.open(source) as opened:
+            image = opened.convert("RGB")
+            image.thumbnail((1500, 2100))
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG", optimize=True)
+        return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
     def _vision_completion(self, prompt: str, encoded_image: str, max_tokens: int) -> str:
-        """Request a vision completion, trying only models compatible with the configured provider."""
+        """Request a vision completion, retrying compatible models before reporting failure."""
         if self._client is None:
             return ""
 
@@ -163,21 +224,19 @@ class ManusTranslationService:
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{encoded_image}"}},
             ],
         }]
+        errors: list[str] = []
         for vision_model in self._vision_model_candidates():
-            try:
-                response = self._client.chat.completions.create(
-                    model=vision_model,
-                    messages=message,
-                    temperature=0.1,
-                    max_tokens=max_tokens,
-                    timeout=25.0,
-                )
-                content = self._clean_model_output(response.choices[0].message.content)
-                if content:
-                    return content
-            except Exception:
-                # Tentar o próximo modelo de visão compatível, sem inserir o erro no manual.
-                continue
+            content = self._completion_with_retries(
+                model=vision_model,
+                messages=message,
+                max_tokens=max_tokens,
+                attempts=2,
+            )
+            if content:
+                return content
+            if self._last_error:
+                errors.append(self._last_error)
+        self._last_error = " | ".join(dict.fromkeys(errors))
         return ""
 
     def translate_text(self, text: str, target_language: str) -> str:
@@ -269,17 +328,16 @@ class ManusTranslationService:
                 f"CONTEÚDO-FONTE EXTRAÍDO:\n{source_chunk}"
             )
             try:
-                response = self._client.chat.completions.create(
+                translated = self._completion_with_retries(
                     model=self._model,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.1,
                     max_tokens=1400,
-                    timeout=25.0,
+                    attempts=2,
                 )
-                translated = self._clean_model_output(response.choices[0].message.content)
                 if translated:
                     translated_chunks.append(translated)
-            except Exception:
+            except Exception as error:
+                self._last_error = str(error)
                 continue
         return "\n\n".join(translated_chunks).strip()
 
@@ -313,10 +371,7 @@ class ManusTranslationService:
         if self._client is None or not source.exists():
             return ""
         try:
-            import base64
-
-            with open(source, "rb") as image_file:
-                encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
+            encoded_image = self._encode_image_for_vision(source)
             prompt = (
                 "Leia esta página de um manual técnico industrial. Retorne SOMENTE uma transcrição "
                 "concisa e factual do que realmente aparece: título visível, avisos, procedimentos, "
@@ -347,9 +402,7 @@ class ManusTranslationService:
             return ""
 
         try:
-            import base64
-            with open(source, "rb") as image_file:
-                encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+            encoded_string = self._encode_image_for_vision(source)
 
             lang_name = LANGUAGE_NAMES.get(target_language, "Brazilian Portuguese")
             prompt = (
@@ -374,7 +427,7 @@ class ManusTranslationService:
                 "Retorne somente o Markdown final, sem explicações, comentários, texto-fonte ecoado, rótulos "
                 "como `TEXT:` ou `Tradução:`, nem blocos <think>."
             )
-            response_text = self._vision_completion(prompt, encoded_string, max_tokens=3600)
+            response_text = self._vision_completion(prompt, encoded_string, max_tokens=2200)
             structured = self._clean_model_output(response_text)
             if structured:
                 return structured

@@ -210,6 +210,23 @@ def test_structured_translation_splits_dense_source_text_on_safe_boundaries() ->
     assert "procedimento de manutenção" in "\n".join(chunks)
 
 
+def test_structured_translation_prioritizes_original_pdf_text_before_visual_reading() -> None:
+    service = ManusTranslationService("en", api_key="test-key")
+    service._client = object()
+    service._structured_source_completion = lambda source_text, language: "Conteúdo técnico extraído do PDF-fonte."
+    service._vision_completion = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("A visão não deveria ser chamada quando há texto-fonte disponível.")
+    )
+
+    result = service.extract_structured_content(
+        Path("/arquivo/que-nao-precisa-existir.png"),
+        "pt",
+        "Original manual source text with technical instructions.",
+    )
+
+    assert result == "Conteúdo técnico extraído do PDF-fonte."
+
+
 def test_layout_detection_routes_repeated_or_collapsed_pdf_text_to_visual_reading() -> None:
     assert ManusTranslationService._requires_visual_layout_reconstruction(
         """Etapa
@@ -529,6 +546,8 @@ class _EmptyStructuredTranslator:
     def translate_page(self, source: Path, target: Path, target_language: str) -> None:
         target.write_bytes(source.read_bytes())
 
+    last_error = "limite temporário do modelo de visão"
+
     def extract_structured_content(
         self,
         source: Path,
@@ -633,6 +652,7 @@ def test_text_mode_page_never_falls_back_to_an_english_image() -> None:
         except TranslationError as error:
             assert "página 9" in str(error)
             assert "inglês como imagem" in str(error)
+            assert "limite temporário" in str(error)
 
 
 def test_visual_marker_preserves_only_the_graphic_page_as_image() -> None:
@@ -730,6 +750,7 @@ if __name__ == "__main__":
     test_rmarkdown_formatter_removes_duplicate_source_chapter_and_preserves_subheading()
     test_rmarkdown_formatter_recovers_a_table_collapsed_into_one_line()
     test_structured_translation_splits_dense_source_text_on_safe_boundaries()
+    test_structured_translation_prioritizes_original_pdf_text_before_visual_reading()
     test_layout_detection_routes_repeated_or_collapsed_pdf_text_to_visual_reading()
     test_text_outline_parser_builds_sections_with_real_page_evidence()
     test_text_outline_parser_rejects_generic_or_unmatched_titles()
