@@ -124,9 +124,13 @@ Selecione uma página e use a ferramenta de recorte. Você pode criar várias va
 
 Crie seções e subseções na árvore de conteúdo. Elas continuam editáveis após a criação: renomeie títulos, adicione ou remova subseções, inclua blocos de texto e ajuste o manual conforme a necessidade técnica.
 
+Clique com o **botão direito** sobre uma seção ou subseção para abrir o menu de contexto. Por ele, é possível editar o título, excluir o item ou movê-lo para cima/baixo na ordem do manual. As subseções são movidas somente dentro da seção à qual pertencem, preservando a hierarquia do documento.
+
 Ao usar **Open HTML**, o aplicativo interpreta a hierarquia de cabeçalhos do documento e cria automaticamente uma estrutura inicial de seções e subseções. O título principal do HTML é usado como título do manual quando identificado. Essa estrutura é uma base totalmente editável: você pode revisar nomes, acrescentar conteúdo e modificar qualquer seção criada.
 
 > Cada imagem encontrada no HTML é registrada no bloco correspondente como um aviso de captura. Abra a pré-visualização, crie um recorte quando a figura for necessária no manual final e inclua-o na seção indicada. Assim, a aplicação não presume que uma imagem visual possa ser convertida em texto de forma segura.
+
+O painel de IA mostra automaticamente as imagens pendentes após a importação, informando a seção ou subseção em que cada uma foi encontrada. Para consultar a lista novamente a qualquer momento, use **Revisar Imagens Pendentes**. Esse comando não chama uma API externa: ele apresenta os pontos que a análise do HTML identificou para sua revisão.
 
 ### 📝 4. Combine imagens e explicações
 

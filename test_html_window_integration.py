@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from manual_builder.html_service import HtmlRenderService
@@ -54,6 +55,16 @@ def main() -> None:
         assert window.section_tree.topLevelItemCount() == 2
         assert window.export_button.isEnabled(), "A exportação não foi habilitada após criar seções HTML."
         assert "2 seção(ões) editáveis" in window.chat_display.toPlainText()
+        assert "Seção \"Safety\"" in window.chat_display.toPlainText()
+        assert window.image_review_button.isEnabled()
+        assert window.section_tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
+
+        safety_item = window.section_tree.topLevelItem(1)
+        window.section_tree.setCurrentItem(safety_item)
+        window._move_selected_item(-1)
+        assert window._sections[0].title == "Safety", "A seção não foi movida para cima."
+        window._move_selected_item(1)
+        assert window._sections[1].title == "Safety", "A seção não foi movida para baixo."
 
         safety_item = window.section_tree.topLevelItem(1)
         window.section_tree.setCurrentItem(safety_item)
@@ -66,6 +77,11 @@ def main() -> None:
         window.subsection_name.setText("Notas adicionais")
         window.add_subsection()
         assert window._sections[1].subsections[-1].title == "Notas adicionais"
+
+        parent = window.section_tree.topLevelItem(1)
+        window.section_tree.setCurrentItem(parent.child(1))
+        window._move_selected_item(-1)
+        assert window._sections[1].subsections[0].title == "Notas adicionais"
 
         window.close()
 

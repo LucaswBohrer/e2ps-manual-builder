@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -193,6 +194,8 @@ class MainWindow(QMainWindow):
         self.ai_generate_text_button.clicked.connect(self.ai_generate_section_text)
 
         self.section_tree.currentItemChanged.connect(self._section_selection_changed)
+        self.section_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.section_tree.customContextMenuRequested.connect(self._show_section_context_menu)
 
         section_panel = QGroupBox("Manual Structure & Content Editor")
         section_layout = QVBoxLayout(section_panel)
@@ -259,8 +262,15 @@ class MainWindow(QMainWindow):
         chat_input_layout.addWidget(self.chat_input)
         chat_input_layout.addWidget(self.chat_send_button)
 
+        self.image_review_button = QPushButton("🤖 Revisar Imagens Pendentes")
+        self.image_review_button.setToolTip(
+            "Lista, por seção e subseção, as imagens do HTML que precisam de captura ou recorte."
+        )
+        self.image_review_button.clicked.connect(self._show_pending_image_review)
+
         ai_chat_layout.addWidget(self.chat_display)
         ai_chat_layout.addLayout(chat_input_layout)
+        ai_chat_layout.addWidget(self.image_review_button)
         right_layout.addWidget(ai_chat_group)
 
         language_group = QGroupBox("Translation & Cover")
@@ -646,6 +656,8 @@ class MainWindow(QMainWindow):
             f"{escape(summary)}"
         )
         self.statusBar().showMessage(summary, 9000)
+        if plan.image_count:
+            self._show_pending_image_review()
 
     def _build_sections_from_html_plan(self, plan: HtmlStructurePlan) -> int:
         """Map the semantic HTML plan to the regular, fully editable manual models."""
@@ -673,6 +685,51 @@ class MainWindow(QMainWindow):
                 )
             )
         return len(self._sections)
+
+    def _pending_image_locations(self) -> list[str]:
+        """Return image-capture notices together with their editable section locations."""
+        pending: list[str] = []
+        for section in self._sections:
+            section_location = f"Seção \"{section.title}\""
+            for content in section.content:
+                if isinstance(content, str) and content.startswith("Imagem encontrada:"):
+                    pending.append(f"{section_location}: {content}")
+            for subsection in section.subsections:
+                subsection_location = (
+                    f"{section_location} › Subseção \"{subsection.title}\""
+                )
+                for content in subsection.content:
+                    if isinstance(content, str) and content.startswith("Imagem encontrada:"):
+                        pending.append(f"{subsection_location}: {content}")
+        return pending
+
+    def _show_pending_image_review(self) -> None:
+        """Display in the AI panel where HTML images still require manual capture."""
+        pending = self._pending_image_locations()
+        if not pending:
+            message = (
+                "Nenhuma imagem pendente de captura foi encontrada nas seções atuais. "
+                "Se você ainda precisar incluir uma figura, crie um recorte da pré-visualização "
+                "e adicione-o à seção desejada."
+            )
+            self.chat_display.append(
+                "<br><b>🤖 Revisão de imagens pendentes:</b><br>"
+                f"{escape(message)}"
+            )
+            self.statusBar().showMessage("Nenhuma imagem pendente de captura.", 5000)
+            return
+
+        items = "".join(f"<li>{escape(location)}</li>" for location in pending)
+        self.chat_display.append(
+            "<br><b>🤖 Revisão de imagens pendentes:</b><br>"
+            "As imagens abaixo foram encontradas no HTML, mas ainda precisam ser verificadas "
+            "na pré-visualização e incluídas como recorte/captura se forem necessárias no manual final."
+            f"<ol>{items}</ol>"
+        )
+        self.statusBar().showMessage(
+            f"Há {len(pending)} imagem(ns) pendente(s) de captura. Veja o painel de IA.",
+            9000,
+        )
 
     def _rendering_failed(self, error: str) -> None:
         self.progress.setVisible(False)
@@ -900,6 +957,84 @@ class MainWindow(QMainWindow):
                 )
                 parent.addChild(child)
             parent.setExpanded(True)
+
+    def _show_section_context_menu(self, position) -> None:
+        """Show editing, deletion and ordering actions for the clicked tree item."""
+        item = self.section_tree.itemAt(position)
+        if item is None:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data:
+            return
+        item_type, section_index, subsection_index = data
+        self.section_tree.setCurrentItem(item)
+
+        menu = QMenu(self)
+        edit_action = menu.addAction("Editar título…")
+        delete_action = menu.addAction("Excluir seção" if item_type == "section" else "Excluir subseção")
+        menu.addSeparator()
+        move_up_action = menu.addAction(
+            "Mover seção para cima" if item_type == "section" else "Mover subseção para cima"
+        )
+        move_down_action = menu.addAction(
+            "Mover seção para baixo" if item_type == "section" else "Mover subseção para baixo"
+        )
+
+        if item_type == "section":
+            move_up_action.setEnabled(section_index > 0)
+            move_down_action.setEnabled(section_index < len(self._sections) - 1)
+        else:
+            siblings = self._sections[section_index].subsections
+            move_up_action.setEnabled(subsection_index > 0)
+            move_down_action.setEnabled(subsection_index < len(siblings) - 1)
+
+        selected_action = menu.exec(self.section_tree.viewport().mapToGlobal(position))
+        if selected_action == edit_action:
+            self.rename_selected_item()
+        elif selected_action == delete_action:
+            self.remove_selected_section()
+        elif selected_action == move_up_action:
+            self._move_selected_item(-1)
+        elif selected_action == move_down_action:
+            self._move_selected_item(1)
+
+    def _move_selected_item(self, direction: int) -> None:
+        """Move the selected section or subsection one position in its own hierarchy."""
+        item = self.section_tree.currentItem()
+        if item is None or direction not in {-1, 1}:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data:
+            return
+        item_type, section_index, subsection_index = data
+
+        if item_type == "section":
+            destination_index = section_index + direction
+            if not 0 <= destination_index < len(self._sections):
+                return
+            self._sections[section_index], self._sections[destination_index] = (
+                self._sections[destination_index],
+                self._sections[section_index],
+            )
+            self._refresh_sections()
+            self.section_tree.setCurrentItem(
+                self.section_tree.topLevelItem(destination_index)
+            )
+            self.statusBar().showMessage("Ordem da seção atualizada.", 4000)
+            return
+
+        siblings = self._sections[section_index].subsections
+        destination_index = subsection_index + direction
+        if not 0 <= destination_index < len(siblings):
+            return
+        siblings[subsection_index], siblings[destination_index] = (
+            siblings[destination_index],
+            siblings[subsection_index],
+        )
+        self._refresh_sections()
+        parent = self.section_tree.topLevelItem(section_index)
+        self.section_tree.setCurrentItem(parent.child(destination_index))
+        self.statusBar().showMessage("Ordem da subseção atualizada.", 4000)
 
     def _section_selection_changed(
         self,
