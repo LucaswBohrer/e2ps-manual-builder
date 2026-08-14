@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-installer:
@@ -46,3 +47,11 @@ jobs:
           path: dist/E2PS Manual Builder
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish installer in the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: E2PS Manual Builder ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release/E2PS-Manual-Builder-Setup-1.0.0.exe
