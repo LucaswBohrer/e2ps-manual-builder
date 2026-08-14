@@ -6,15 +6,15 @@ REM Requirements: Python 3.10+ (64-bit) and Inno Setup 6.
 
 cd /d "%~dp0.."
 
-py -3 -m pip install --upgrade pip
-py -3 -m pip install -r requirements.txt pyinstaller>=6.0,<7.0
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt "pyinstaller>=6.0,<7.0"
 
 rmdir /s /q build 2>nul
 rmdir /s /q dist 2>nul
 rmdir /s /q release 2>nul
 
-py -3 packaging\create_application_icon.py
-py -3 -m PyInstaller --noconfirm --clean packaging\E2PSManualBuilder.spec
+python packaging\create_application_icon.py
+python -m PyInstaller --noconfirm --clean packaging\E2PSManualBuilder.spec
 if errorlevel 1 goto :error
 
 set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
