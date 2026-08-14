@@ -1,301 +1,237 @@
 <div align="center">
 
-# 🧰 E2PS Manual Builder
+# E2PS Manual Builder
 
-### Monte, organize, traduza e exporte manuais técnicos com uma interface visual e assistência de IA.
+### Estruture, traduza e exporte manuais técnicos com uma interface visual.
 
-[![Status](https://img.shields.io/badge/status-em%20desenvolvimento-F58220?style=for-the-badge&labelColor=1F2937)](https://github.com/LuquinhasBohrer/e2ps-manual-builder)
+[![Windows](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Desktop](https://img.shields.io/badge/Interface-PySide6-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://doc.qt.io/qtforpython-6/)
-[![Projeto](https://img.shields.io/badge/Projeto-.e2ps-6B46C1?style=for-the-badge&labelColor=1F2937)](#-projetos-e2ps-continuidade-do-trabalho)
-[![Exportação](https://img.shields.io/badge/Exportação-R%20Markdown-276DC3?style=for-the-badge&labelColor=1F2937)](#-exportação-em-r-markdown-e-pdf)
+[![Interface](https://img.shields.io/badge/Interface-PySide6-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://doc.qt.io/qtforpython-6/)
+[![Projetos](https://img.shields.io/badge/Projetos-.e2ps-6B46C1?style=for-the-badge&labelColor=1F2937)](#projetos-e2ps)
+[![Exportação](https://img.shields.io/badge/Exportação-R%20Markdown-276DC3?style=for-the-badge&labelColor=1F2937)](#exportação-r-markdown-e-pdf)
 
-[Começar agora](#-instalação-rápida) · [Fluxo de trabalho](#-fluxo-de-trabalho) · [IA e tradução](#-ia-e-tradução) · [Salvar projeto](#-projetos-e2ps-continuidade-do-trabalho) · [Ajuda](#-solução-de-problemas)
+**[Baixar para Windows](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest)** · **[Como usar](#fluxo-de-trabalho)** · **[IA e tradução](#ia-e-tradução)** · **[Solução de problemas](#solução-de-problemas)**
 
 </div>
 
 ---
 
-## ✨ O que é o E2PS Manual Builder?
+## Visão geral
 
-O **E2PS Manual Builder** é uma aplicação desktop criada para acelerar a preparação de manuais técnicos a partir de PDFs, imagens ou arquivos HTML/HTM. Ele transforma um conjunto de páginas soltas em um projeto editorial organizado: você seleciona o conteúdo relevante, cria recortes, define seções, escreve explicações e exporta a estrutura para **R Markdown**, pronta para revisão e geração de PDF.
+O **E2PS Manual Builder** é uma aplicação desktop para transformar PDFs, imagens e arquivos HTML/HTM em projetos de manuais técnicos organizados. O usuário seleciona o conteúdo relevante, cria recortes, organiza seções e subseções, adiciona explicações e exporta o resultado em **R Markdown**, pronto para revisão e geração de PDF.
 
-> **Pensado para manuais extensos:** salve o progresso em um arquivo portátil `.e2ps`, feche o aplicativo sem medo e retome o trabalho exatamente do ponto em que parou.
+> **O programa foi pensado para manuais extensos.** Salve o trabalho em um arquivo `.e2ps`, feche o aplicativo e retome depois com páginas, recortes, estrutura e textos preservados.
+
+| Entrada | Tratamento no E2PS | Saída |
+|:--|:--|:--|
+| PDF técnico | Pré-visualização, texto selecionável, recortes e proposta de estrutura | Texto Markdown ou ilustração, conforme o tipo de página |
+| Imagens | Importação em lote, organização e recortes | Figuras posicionadas no manual |
+| HTML/HTM | Leitura de cabeçalhos, texto-fonte e indicação de imagens pendentes | Seções editáveis e conteúdo estruturado |
 
 ---
 
-## 🚀 Principais recursos
+## Baixar e instalar no Windows
 
-| Recurso | O que você pode fazer |
+A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já inclui o programa e suas dependências; portanto, **não é necessário instalar Python nem abrir terminal**.
+
+### Instalação em três passos
+
+1. Abra a página de [**Releases do projeto**](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest).
+2. Baixe o arquivo **`E2PS-Manual-Builder-Setup-1.0.0.exe`** na seção **Assets**.
+3. Execute o instalador e abra **E2PS Manual Builder** pelo Menu Iniciar ou pelo atalho da Área de Trabalho.
+
+| Distribuição | Quando usar | Conteúdo |
+|:--|:--|:--|
+| **Instalador `.exe`** | Recomendado para uso normal | Atalhos, associação de arquivos `.e2ps` e desinstalador do Windows |
+| **Versão portátil `.zip`** | Uso temporário ou sem permissão para instalar | Pasta completa; extraia-a e execute `E2PSManualBuilder.exe` |
+
+> O instalador não possui assinatura comercial. Caso o Windows mostre uma confirmação adicional na primeira abertura, verifique se o arquivo foi baixado da Release oficial deste repositório antes de continuar.
+
+---
+
+## Recursos principais
+
+| Recurso | Descrição |
 |:--|:--|
-| 📄 **PDFs, imagens e HTML** | Abrir um PDF, importar várias imagens ou carregar um manual HTML/HTM diretamente para a montagem do manual. |
-| 🧠 **Estrutura automática de PDF** | Selecionar o conteúdo técnico essencial do PDF e criar seções/subseções editáveis sem copiar todo o catálogo do fabricante. |
-| ✂️ **Recortes ilimitados** | Criar mais de um recorte da mesma página e utilizar cada variante como um item independente. |
-| 🧱 **Seções flexíveis** | Criar, renomear e editar seções e subseções depois de iniciadas. |
-| ✍️ **Texto entre imagens** | Inserir explicações antes, entre ou após qualquer imagem de uma seção. |
-| 🖼️ **Capa personalizada** | Selecionar uma imagem de capa diretamente pela interface. |
-| 🤖 **Assistente de IA** | Pedir sugestões de estrutura, gerar textos de apoio e conversar sobre o manual carregado. |
-| 🌍 **Tradução técnica** | Exportar em português, inglês e espanhol, escolhendo página a página entre imagem original ou texto/tabela editável. |
-| 💾 **Projetos `.e2ps`** | Salvar e reabrir todo o trabalho, incluindo páginas, recortes, capa, estrutura e textos. |
-| 📦 **R Markdown** | Gerar uma estrutura organizada para compilar o manual em PDF. |
+| **Importação de PDF, imagens e HTML** | Carrega manuais em vários formatos em uma única interface visual. |
+| **Estrutura automática editável** | Sugere seções e subseções com base no documento, mantendo a edição final sob controle do usuário. |
+| **Recortes ilimitados** | Crie vários recortes da mesma página para separar tabelas, diagramas e observações. |
+| **Editor de seções** | Renomeie, crie, exclua e reordene seções e subseções a qualquer momento. |
+| **Texto entre figuras** | Insira avisos, instruções, listas e explicações antes, entre ou depois das imagens. |
+| **Capa personalizada** | Inclua a imagem de capa diretamente no projeto. |
+| **Assistente de IA** | Faça perguntas sobre o manual, obtenha sugestões de estrutura e gere textos de apoio. |
+| **Tradução técnica** | Exporte em português, inglês ou espanhol, escolhendo texto/tabela ou imagem para cada conteúdo. |
+| **Projetos `.e2ps`** | Salve e reabra o trabalho completo sem perder a montagem já realizada. |
+| **R Markdown** | Gere um projeto organizado para revisão e compilação posterior em PDF. |
 
 ---
 
-## 🧭 Fluxo de trabalho
+## Fluxo de trabalho
 
 ```mermaid
 flowchart LR
-    A[📄 PDF, imagens ou HTML] --> B[✂️ Selecionar páginas e criar recortes]
-    B --> C[🧱 Montar seções e subseções]
-    C --> D[✍️ Inserir textos e definir modos de tradução]
-    D --> E[💾 Salvar projeto .e2ps]
-    E --> F[📦 Exportar R Markdown]
-    F --> G[📘 Revisar e compilar PDF]
+    A[PDF, imagens ou HTML] --> B[Selecionar páginas e criar recortes]
+    B --> C[Organizar seções e subseções]
+    C --> D[Adicionar texto e definir exportação]
+    D --> E[Salvar projeto .e2ps]
+    E --> F[Exportar R Markdown]
+    F --> G[Revisar e gerar PDF]
 
-    classDef input fill:#E8F1FF,stroke:#3776AB,color:#172554;
-    classDef edit fill:#FFF4E6,stroke:#F58220,color:#7C2D12;
+    classDef source fill:#E8F1FF,stroke:#3776AB,color:#172554;
+    classDef editing fill:#FFF4E6,stroke:#F58220,color:#7C2D12;
     classDef save fill:#F3E8FF,stroke:#6B46C1,color:#3B0764;
     classDef output fill:#EAF8EE,stroke:#1E8E3E,color:#14532D;
 
-    class A input;
-    class B,C,D edit;
+    class A source;
+    class B,C,D editing;
     class E save;
     class F,G output;
 ```
 
-O aplicativo foi concebido para trabalhar de forma incremental. Você pode começar pela seleção de imagens, organizar apenas uma parte do manual, salvar o projeto e continuar depois — sem precisar repetir a estrutura já construída.
+### 1. Carregue o material
+
+Use **Open PDF**, **Open Images** ou **Open HTML**. A origem é convertida em páginas com miniaturas e pré-visualização. Em PDFs, o aplicativo aproveita o texto selecionável; em HTML, aproveita a hierarquia de cabeçalhos e identifica as imagens que precisam ser revisadas ou recortadas.
+
+> Para carregar um HTML com fidelidade, mantenha o arquivo `.html` junto de suas imagens, folhas de estilo e outros recursos locais.
+
+### 2. Crie recortes e selecione conteúdo
+
+Use a ferramenta de recorte para separar uma tabela, um diagrama elétrico ou uma observação dentro da mesma página. Cada recorte pode ser inserido em uma parte diferente do manual.
+
+### 3. Organize o manual
+
+Crie ou edite seções e subseções na árvore de conteúdo. Clique com o botão direito em uma seção para renomear, editar o conteúdo, excluir ou mover sua posição. Em **Editar conteúdo**, você pode incluir páginas, recortes e textos em qualquer ordem.
+
+A análise automática de PDFs cria uma proposta inicial baseada em evidências textuais do próprio documento. Ela não substitui a revisão editorial: todas as páginas e seções propostas continuam editáveis antes da exportação.
+
+### 4. Escolha o modo adequado para cada página
+
+| Modo de exportação | Indicado para | Resultado |
+|:--|:--|:--|
+| **Imagem** | Diagramas, certificados, desenhos, esquemas e símbolos | Preserva a imagem original como ilustração. |
+| **Texto/Tabela** | Procedimentos, avisos, especificações, listas e tabelas | Usa o texto-fonte selecionável para produzir Markdown editável e traduzível. |
+
+Para conteúdo técnico predominantemente textual, prefira **Texto/Tabela**. Diagramas e desenhos dimensionais devem permanecer como imagem para preservar medidas, símbolos e geometria.
+
+### 5. Salve antes de parar
+
+Use **Save Project (.e2ps)** em pontos importantes do trabalho. O arquivo guarda o estado do projeto para que o manual possa ser retomado posteriormente.
 
 ---
 
-## 🪟 Aplicativo Windows e instalador
+## IA e tradução
 
-O projeto agora possui uma configuração de distribuição para **Windows 64 bits**. O instalador entrega o aplicativo com Python, Qt, leitura de PDF e demais dependências já incluídas; portanto, quem vai usar o programa **não precisa instalar Python, bibliotecas ou abrir terminal**.
+O painel de IA permite pedir sugestões de estrutura, gerar textos de apoio e fazer perguntas sobre o manual carregado. A análise de PDF usa o conteúdo da fonte como evidência e mantém a proposta editável.
 
-| Artefato | Uso |
-|:--|:--|
-| **`E2PS-Manual-Builder-Setup-1.0.0.exe`** | Instalador recomendado. Cria atalho no menu Iniciar, oferece atalho na Área de Trabalho, registra a extensão `.e2ps` e disponibiliza desinstalação pelo Windows. |
-| **Pasta portátil `E2PS Manual Builder`** | Alternativa sem instalação. Basta extrair a pasta inteira e executar `E2PSManualBuilder.exe`. |
+### Configuração com GroqCloud
 
-Após cada envio à `main`, a automação **Windows installer** gera esses dois artefatos. No GitHub, abra a aba [Actions](https://github.com/LuquinhasBohrer/e2ps-manual-builder/actions), selecione a execução mais recente e baixe o artefato **E2PS-Manual-Builder-Windows-Installer**. Extraia o download e execute o arquivo `Setup`.
-
-> O instalador não é assinado com certificado comercial. Em alguns computadores, o Windows pode pedir confirmação adicional na primeira execução; confira que o arquivo foi obtido do repositório oficial antes de prosseguir.
-
-### Gerar localmente no Windows
-
-Para criar uma versão nova no seu próprio computador de desenvolvimento, instale **Python 3.10+ de 64 bits** e **Inno Setup 6**. Depois, execute `packaging\\build_windows.bat`. Ao fim do processo, o executável estará em `dist\\E2PS Manual Builder` e o instalador em `release`.
-
-## ⚡ Instalação rápida para desenvolvimento
-
-### 1. Pré-requisito
-
-Tenha o **Python 3.10 ou superior** instalado. A interface é baseada em PySide6 e as dependências do aplicativo estão declaradas em `requirements.txt`.
-
-### 2. Clone e instale
-
-```bash
-git clone https://github.com/LuquinhasBohrer/e2ps-manual-builder.git
-cd e2ps-manual-builder
-python -m pip install -r requirements.txt
-```
-
-### 3. Inicie o aplicativo
-
-```bash
-python main.py
-```
-
-No Windows, caso `python` não seja reconhecido, substitua o comando por `py`:
-
-```powershell
-py -m pip install -r requirements.txt
-py main.py
-```
-
-| Dependência | Finalidade |
-|:--|:--|
-| `PySide6` | Interface gráfica desktop. |
-| `PyMuPDF` | Leitura de PDFs, renderização de páginas e extração de texto. |
-| `Pillow` | Importação, conversão e geração de miniaturas de imagens. |
-| `openai` | Comunicação com provedores compatíveis com a API OpenAI. |
-
----
-
-## 🛠️ Fluxo de trabalho
-
-### 📥 1. Carregue o material
-
-Use **Open PDF** para abrir documentos PDF, **Open Images** para importar imagens prontas ou **Open HTML** para carregar manuais em `.html` ou `.htm`. Todos os formatos são convertidos em páginas com miniaturas e pré-visualização central.
-
-| Tipo de origem | O que o aplicativo aproveita |
-|:--|:--|
-| 📄 **PDF** | Renderiza páginas, extrai o texto incorporado quando disponível, permite recortes e cria uma estrutura inicial enxuta com conteúdo técnico selecionado. |
-| 🖼️ **Imagens** | Importa vários arquivos de uma vez, cria miniaturas e permite recortes. |
-| 🌐 **HTML/HTM** | Renderiza o conteúdo visual em páginas para seleção/recorte, lê a hierarquia de cabeçalhos para criar seções e subseções editáveis e extrai o texto-fonte para a IA e a exportação em Texto/Tabela. |
-
-> Para que imagens, CSS e fontes referenciados por um HTML sejam encontrados, mantenha o arquivo HTML e a pasta de recursos original juntos. Arquivos que dependem de login, scripts remotos ou internet podem ter aparência diferente da página exibida no navegador.
-
-### ✂️ 2. Crie recortes quando necessário
-
-Selecione uma página e use a ferramenta de recorte. Você pode criar várias variantes da mesma página, por exemplo, uma tabela, um esquema elétrico e uma observação localizada. Cada recorte pode ser enviado a uma seção diferente.
-
-### 🧩 3. Estruture o manual
-
-Crie seções e subseções na árvore de conteúdo. Elas continuam editáveis após a criação: renomeie títulos, adicione ou remova subseções, inclua blocos de texto e ajuste o manual conforme a necessidade técnica.
-
-Ao usar **Open PDF**, a aplicação analisa o texto extraído em segundo plano e cria uma proposta inicial de estrutura. Ela prioriza segurança, instalação, operação, manutenção, solução de problemas e dados técnicos; páginas de índice, capa, marketing, referências ou duplicadas são deixadas de fora quando identificadas. Quando uma página contém somente rodapé, número de página ou texto insuficiente — situação comum em PDF escaneado — a aplicação solicita uma **leitura visual** antes de estruturar o conteúdo. A proposta não é uma cópia integral do manual do fabricante: cada seção selecionada precisa apresentar uma **evidência literal verificável** no texto de uma de suas páginas. A análise aceita respostas em JSON ou em listas de texto/Markdown, como `Segurança — páginas 4–5`; nesse segundo caso, o aplicativo obtém a evidência diretamente das páginas indicadas. Respostas genéricas, páginas inexistentes ou títulos sem suporte no PDF são rejeitados; nesse caso, o aplicativo usa uma seleção local editável baseada no texto realmente recuperado e procura usar um título visível da página em vez de criar um nome genérico. Cada seção e cada página criada podem ser ajustadas ou removidas no **Editar conteúdo** antes da exportação.
-
-Clique com o **botão direito** sobre uma seção ou subseção para abrir o menu de contexto. Por ele, é possível **editar o conteúdo**, renomear o título, excluir o item ou movê-lo para cima/baixo na ordem do manual. As subseções são movidas somente dentro da seção à qual pertencem, preservando a hierarquia do documento.
-
-Em **Editar conteúdo**, é possível alterar os textos e avisos existentes, criar novos blocos de texto, inserir qualquer página ou recorte já importado, remover itens e mudar a ordem de todos os elementos. Portanto, quando o HTML indicar uma imagem pendente, você pode criar o recorte depois ou importar uma imagem e posicioná-la diretamente na seção ou subseção indicada.
-
-Ao usar **Open HTML**, o aplicativo interpreta a hierarquia de cabeçalhos do documento e cria automaticamente uma estrutura inicial de seções e subseções. O título principal do HTML é usado como título do manual quando identificado. Essa estrutura é uma base totalmente editável: você pode revisar nomes, acrescentar conteúdo e modificar qualquer seção criada.
-
-> Cada imagem encontrada no HTML é registrada no bloco correspondente como um aviso de captura. Abra a pré-visualização, crie um recorte quando a figura for necessária no manual final e inclua-o na seção indicada. Assim, a aplicação não presume que uma imagem visual possa ser convertida em texto de forma segura.
-
-O painel de IA mostra automaticamente apenas as **seções e subseções** que possuem imagens pendentes após a importação. Para consultar a lista novamente a qualquer momento, use **Revisar Imagens Pendentes**. Esse comando não chama uma API externa: ele apresenta as localizações que a análise do HTML identificou para sua revisão, sem exibir o conteúdo técnico ou Base64 da imagem.
-
-### 📝 4. Combine imagens e explicações
-
-Cada seção suporta uma sequência mista de blocos. Isso permite colocar uma imagem, inserir um texto explicativo, acrescentar outra imagem e concluir com uma observação ou tabela.
-
-> Organize a sequência dentro da seção **antes de exportar**, pois ela define a ordem do conteúdo no R Markdown e no PDF final.
-
-### 🎨 5. Defina a capa
-
-Use a opção de capa para selecionar uma imagem que será copiada automaticamente para o projeto exportado.
-
-### 💾 6. Salve o andamento
-
-Antes de fechar o aplicativo — e ao concluir cada etapa importante — use **Save Project (.e2ps)**. Consulte a seção de continuidade do trabalho para entender o que é salvo.
-
----
-
-## 🤖 IA e tradução
-
-### 💬 Assistente de IA
-
-O painel de IA permite fazer perguntas sobre o manual e solicitar textos técnicos de apoio. Ao importar um **PDF**, a análise automática cria uma estrutura inicial enxuta; o comando **Suggest Structure** exibe essa mesma seleção fundamentada, com as páginas e evidências literais do documento, sem alterar a estrutura atual. O painel não aceita mais uma sugestão livre ou genérica sem vínculo verificável com o PDF carregado. Em todos os casos, a decisão final permanece com você, pois todos os itens podem ser editados antes da exportação.
-
-### ☁️ Configuração com GroqCloud
-
-O aplicativo aceita serviços compatíveis com a API OpenAI. Para usar GroqCloud, informe sua chave, a URL-base e um modelo disponível na sua conta. Uma URL-base comum é:
+O aplicativo aceita provedores compatíveis com a API OpenAI. Para GroqCloud, informe a chave de acesso, a URL-base e um modelo disponível em sua conta.
 
 ```text
 https://api.groq.com/openai/v1
 ```
 
-Depois de configurar, utilize **Salvar Configs**. A API Key, a URL-base e o modelo ficam disponíveis nas próximas aberturas do aplicativo no mesmo computador e perfil de usuário.
+Salve a configuração pelo botão **Salvar Configs**. As preferências ficam armazenadas no computador atual, mas a chave de API **não** é gravada no arquivo `.e2ps`.
 
-> 🔐 **Importante:** a sua chave de IA nunca é gravada no arquivo `.e2ps`. Ela permanece apenas nas preferências locais do computador.
-
-### 🌐 Modos de exportação por página
-
-| Modo | Indicado para | Resultado |
-|:--|:--|:--|
-| 🖼️ **Imagem** | Diagramas, símbolos, certificados, desenhos ou páginas cuja aparência precisa ser preservada. | Copia a imagem original para o projeto sem inserir texto bruto da IA sobre a figura. |
-| 📊 **Texto/Tabela (OCR)** | Especificações, tabelas técnicas, listas de parâmetros, avisos e páginas com muito texto. | Usa primeiro o texto selecionável do PDF/HTML, limpa sobreposições de extração e gera Markdown editável. Quando o idioma precisa mudar, traduz blocos contíguos da seção — não uma imagem por página. |
-
-Para tabelas técnicas que precisam sair em português de forma legível, priorize **Texto/Tabela (OCR)**. Revise sempre números, unidades, referências normativas, símbolos e valores críticos antes de publicar um manual oficial.
-
-> **Fluxo resiliente para PDFs grandes:** páginas com texto extraível não são enviadas ao modelo de visão e nunca retornam como imagem no idioma original. O aplicativo formata localmente o conteúdo-fonte e, quando necessário, solicita a tradução em blocos de seção. A leitura visual fica restrita a páginas realmente sem texto selecionável, como digitalizações. Se essa leitura falhar, o `.Rmd` recebe um comentário de revisão em vez de interromper toda a exportação.
+> **Política de exportação:** o texto selecionável do PDF é a fonte prioritária. A leitura visual é usada somente para páginas realmente sem texto, reduzindo custos, tempo de processamento e o risco de inserir páginas em idioma original como imagem.
 
 ---
 
-## 💾 Projetos `.e2ps`: continuidade do trabalho
+## Projetos `.e2ps`
 
-O formato **`.e2ps`** é o arquivo de projeto oficial do E2PS Manual Builder. Ele é portátil e foi criado para que manuais grandes possam ser interrompidos e retomados com segurança.
+O `.e2ps` é o formato oficial de projeto do E2PS Manual Builder. No Windows instalado, basta dar duplo clique em um arquivo `.e2ps` para abrir o projeto diretamente no aplicativo.
 
-| Elemento salvo no projeto | Incluído? |
+| Elemento preservado | Incluído no `.e2ps` |
 |:--|:--:|
-| Páginas de PDF e imagens importadas | ✅ |
-| Recortes e miniaturas | ✅ |
-| Imagem de capa | ✅ |
-| Seções e subseções | ✅ |
-| Textos inseridos e ordem dos blocos | ✅ |
-| Idiomas e modo de exportação de cada página | ✅ |
-| API Key do provedor de IA | ❌ |
-
-### Salvar e abrir
+| Páginas importadas, miniaturas e recortes | Sim |
+| Imagem de capa | Sim |
+| Seções, subseções e ordem dos blocos | Sim |
+| Textos inseridos e modos de exportação | Sim |
+| Chave de API da IA | **Não** |
 
 | Ação | Como usar |
 |:--|:--|
-| 💾 **Salvar projeto** | Clique em **Save Project (.e2ps)**, escolha a pasta e informe o nome. A extensão `.e2ps` é adicionada automaticamente. |
-| 📂 **Abrir projeto** | Clique em **Open Project (.e2ps)** e selecione o arquivo salvo. O conteúdo editável será restaurado na interface. |
-| 🔁 **Migrar projeto antigo** | Arquivos legados `.emb` ainda podem ser abertos. Ao salvar novamente, passam a usar `.e2ps`. |
+| **Salvar projeto** | Use **Save Project (.e2ps)**, escolha a pasta e informe o nome. |
+| **Abrir projeto** | Use **Open Project (.e2ps)** ou dê duplo clique no arquivo após instalar o aplicativo. |
+| **Migrar arquivo antigo** | Arquivos `.emb` legados ainda podem ser abertos; ao salvar, passam a usar `.e2ps`. |
 
-> Faça cópias de segurança periódicas dos projetos `.e2ps`, principalmente antes de grandes reorganizações. Mantenha também os PDFs e imagens de origem em uma pasta organizada.
+Faça cópias de segurança periódicas, principalmente antes de reestruturar grandes partes do manual.
 
 ---
 
-## 📦 Exportação em R Markdown e PDF
+## Exportação R Markdown e PDF
 
-A exportação gera uma pasta organizada por idioma com o arquivo `.Rmd`, imagens e outros ativos necessários para a compilação do manual. A interface permite selecionar **Português**, **Inglês** e **Espanhol** conforme a necessidade do projeto. Páginas escolhidas em **Texto/Tabela (OCR)** são convertidas em Markdown técnico a partir do texto-fonte: blocos de dados `rótulo: valor` são organizados como tabelas, marcadores são normalizados como listas e frases duplicadas por caixas de texto sobrepostas são recompostas antes do *knit* para PDF.
-
-Para renderizar o PDF, abra o arquivo `.Rmd` em um ambiente com R Markdown configurado, como o RStudio, e execute:
+A exportação cria uma pasta por idioma contendo o `.Rmd` e os ativos necessários. Para compilar o PDF, abra o arquivo no RStudio ou em outro ambiente com R Markdown configurado e execute:
 
 ```r
 rmarkdown::render("manual.Rmd")
 ```
 
-> A compilação em PDF depende de R, Pandoc, pacotes R e uma distribuição LaTeX. Esses componentes pertencem ao ambiente de R Markdown e não são instalados pelo aplicativo Python.
+A compilação requer R, Pandoc, os pacotes R necessários e uma distribuição LaTeX. Esses componentes pertencem ao ambiente de R Markdown e não são instalados pelo E2PS Manual Builder.
 
 ---
 
-## 🩺 Solução de problemas
+## Solução de problemas
 
-| Sintoma | Possível causa | O que fazer |
-|:--|:--|:--|
-| 💥 O terminal abre e fecha ao iniciar. | Dependência ausente ou erro de inicialização. | Abra um terminal na pasta do projeto, execute `python main.py` e instale as dependências com `python -m pip install -r requirements.txt`. |
-| 🖼️ **Open Images** não funciona. | Pillow ausente no ambiente Python utilizado. | Execute `python -m pip install Pillow`. |
-| 🔑 Erro 401 da IA. | Chave inválida ou pertencente a outro provedor. | Confirme a chave e a URL-base configurada. |
-| 🤖 Erro 404 de modelo. | O modelo informado não existe no provedor escolhido. | Use um modelo disponível na sua conta; no Groq, modelos `gpt-*` não pertencem automaticamente ao catálogo. |
-| 📏 Erro 413 / requisição grande. | Texto ou imagem excedeu o limite do provedor. | Divida o conteúdo em etapas ou reduza a quantidade de páginas analisadas de uma vez. |
-| ⏳ Exportação lenta. | Páginas em Texto/Tabela são analisadas individualmente. | Acompanhe o percentual, exporte em etapas ou use o modo Imagem para diagramas e figuras. |
-| 📁 A pasta de exportação apareceu sem imagens. | A exportação ainda está processando ou uma análise visual demorou. | Aguarde a conclusão; as versões atuais copiam imagens antes da chamada à IA. |
-| 🌍 Conteúdo permanece no idioma original. | A página foi exportada como Imagem ou a extração precisa de revisão. | Use Texto/Tabela para conteúdo textual e revise o `.Rmd` antes de gerar o PDF. |
-| 🌐 HTML apareceu incompleto. | O documento depende de arquivos locais ausentes, JavaScript, login ou recursos externos. | Mantenha a pasta de recursos junto ao `.html`; para páginas dinâmicas, imprima/salve em PDF pelo navegador e importe o PDF. |
-| 🧩 O projeto não abre. | Arquivo corrompido ou inválido. | Tente uma cópia de segurança `.e2ps` e mantenha os arquivos em local confiável. |
-
----
-
-## 🧱 Arquitetura do projeto
-
-| Módulo | Responsabilidade |
+| Situação | Ação recomendada |
 |:--|:--|
-| `main.py` | Ponto de entrada da aplicação. |
-| `manual_builder/main_window.py` | Janela principal, páginas, seções, configurações de IA e ações de projeto. |
-| `manual_builder/models.py` | Modelos de páginas, seções e subseções. |
-| `manual_builder/pdf_service.py` | Leitura de PDFs, renderização de páginas e texto. |
-| `manual_builder/html_service.py` | Leitura de HTML/HTM, extração de texto-fonte e renderização em páginas visuais. |
-| `manual_builder/crop_dialog.py` | Interface de criação de recortes. |
-| `manual_builder/ai_service.py` | Chat, sugestões de estrutura e geração de textos. |
-| `manual_builder/translation_service.py` | Tradução, análise visual e extração estruturada. |
-| `manual_builder/project_service.py` | Geração de R Markdown e organização de ativos. |
-| `manual_builder/export_worker.py` | Exportação em segundo plano e progresso. |
-| `manual_builder/project_file_service.py` | Leitura e gravação de projetos `.e2ps`. |
-| `manual_builder/workers.py` | Tarefas em segundo plano de carregamento. |
-| `manual_builder/styles.py` | Estilos da interface Qt. |
+| O instalador não abre | Baixe novamente pela Release oficial e confirme se o download foi concluído. Se o Windows exibir proteção adicional, use somente o arquivo vindo do repositório oficial. |
+| Erro 401 na IA | Revise a chave e a URL-base do provedor. |
+| Erro 404 de modelo | Informe um modelo que exista na conta e no provedor configurados. |
+| Erro 413 ou limite de requisição | Reduza a quantidade de páginas analisadas de uma vez; para PDFs grandes, trabalhe por seção. |
+| Conteúdo saiu no idioma original | Altere páginas predominantemente textuais para **Texto/Tabela** e revise a configuração de tradução. |
+| HTML ficou incompleto | Mantenha os recursos locais junto do HTML; para conteúdo dependente de login ou scripts, salve a página como PDF pelo navegador. |
+| Projeto não abre | Tente uma cópia anterior do `.e2ps` e mantenha os arquivos de trabalho em uma pasta confiável. |
+| O PDF não gera no RStudio | Verifique se R, Pandoc e LaTeX estão configurados corretamente no ambiente de R Markdown. |
 
 ---
 
-## 🧪 Teste de persistência
+## Desenvolvimento local
 
-O repositório inclui testes locais para verificar a criação e reabertura de projetos `.e2ps`, assim como a importação de páginas HTML/HTM com imagem, miniatura e texto-fonte.
+Para desenvolver ou alterar o programa diretamente pelo código-fonte, instale Python 3.10 ou superior e execute:
 
 ```bash
-python test_project_persistence.py
-QT_QPA_PLATFORM=offscreen python test_html_import.py
-QT_QPA_PLATFORM=offscreen python test_html_window_integration.py
+git clone https://github.com/LuquinhasBohrer/e2ps-manual-builder.git
+cd e2ps-manual-builder
+python -m pip install -r requirements.txt
+python main.py
 ```
+
+No Windows, se `python` não for reconhecido, use `py` no lugar de `python`.
+
+### Gerar uma nova distribuição Windows
+
+Instale **Python 3.10+ de 64 bits** e **Inno Setup 6**. Em seguida, execute:
+
+```bat
+packaging\build_windows.bat
+```
+
+O executável portátil será criado em `dist\E2PS Manual Builder` e o instalador em `release`.
+
+---
+
+## Estrutura do código
+
+| Componente | Responsabilidade |
+|:--|:--|
+| `main.py` | Inicialização do aplicativo e abertura direta de projetos `.e2ps`. |
+| `main_window.py` | Interface principal, seções, páginas, IA e ações de projeto. |
+| `pdf_service.py` e `workers.py` | Renderização de PDF e tarefas de leitura em segundo plano. |
+| `html_service.py` | Leitura de HTML/HTM e aproveitamento de texto e cabeçalhos. |
+| `ai_service.py` e `translation_service.py` | Sugestões, chat, tradução e leitura visual de exceção. |
+| `project_service.py` | Montagem do R Markdown e organização de ativos de exportação. |
+| `project_file_service.py` | Leitura e gravação dos projetos `.e2ps`. |
+| `packaging/` | Configuração do PyInstaller, Inno Setup e criação do instalador Windows. |
 
 ---
 
 <div align="center">
 
-### 🛡️ Segurança e boas práticas
+### Segurança e boas práticas
 
-Mantenha a API Key em sigilo, não a envie junto com o projeto e revise qualquer tradução gerada por IA antes de publicar um documento técnico.
+Mantenha sua chave de IA em sigilo, confira números, unidades e referências técnicas antes de publicar um manual oficial e faça backup dos projetos `.e2ps` durante o trabalho.
 
-**E2PS Manual Builder** · Estruture primeiro. Revise sempre. Exporte com confiança.
+**E2PS Manual Builder** · Estruture com clareza. Revise com critério. Exporte com segurança.
 
 </div>
