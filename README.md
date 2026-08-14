@@ -67,7 +67,24 @@ O aplicativo foi concebido para trabalhar de forma incremental. Você pode come�
 
 ---
 
-## ⚡ Instalação rápida
+## 🪟 Aplicativo Windows e instalador
+
+O projeto agora possui uma configuração de distribuição para **Windows 64 bits**. O instalador entrega o aplicativo com Python, Qt, leitura de PDF e demais dependências já incluídas; portanto, quem vai usar o programa **não precisa instalar Python, bibliotecas ou abrir terminal**.
+
+| Artefato | Uso |
+|:--|:--|
+| **`E2PS-Manual-Builder-Setup-1.0.0.exe`** | Instalador recomendado. Cria atalho no menu Iniciar, oferece atalho na Área de Trabalho, registra a extensão `.e2ps` e disponibiliza desinstalação pelo Windows. |
+| **Pasta portátil `E2PS Manual Builder`** | Alternativa sem instalação. Basta extrair a pasta inteira e executar `E2PSManualBuilder.exe`. |
+
+Após cada envio à `main`, a automação **Windows installer** gera esses dois artefatos. No GitHub, abra a aba [Actions](https://github.com/LuquinhasBohrer/e2ps-manual-builder/actions), selecione a execução mais recente e baixe o artefato **E2PS-Manual-Builder-Windows-Installer**. Extraia o download e execute o arquivo `Setup`.
+
+> O instalador não é assinado com certificado comercial. Em alguns computadores, o Windows pode pedir confirmação adicional na primeira execução; confira que o arquivo foi obtido do repositório oficial antes de prosseguir.
+
+### Gerar localmente no Windows
+
+Para criar uma versão nova no seu próprio computador de desenvolvimento, instale **Python 3.10+ de 64 bits** e **Inno Setup 6**. Depois, execute `packaging\\build_windows.bat`. Ao fim do processo, o executável estará em `dist\\E2PS Manual Builder` e o instalador em `release`.
+
+## ⚡ Instalação rápida para desenvolvimento
 
 ### 1. Pré-requisito
 

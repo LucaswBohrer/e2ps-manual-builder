@@ -72,6 +72,11 @@ def main() -> None:
 
         app = QApplication.instance() or QApplication([])
         window = MainWindow()
+        assert window.open_e2ps_project_file(archive)
+        assert window._project_path == archive
+        assert len(window._pages) == 2
+        assert window._sections[0].title == "Dados técnicos"
+
         window._settings = QSettings(str(root / "settings.ini"), QSettings.Format.IniFormat)
         window.api_key_input.setText("gsk_test_local_only")
         window.base_url_input.setText("https://api.groq.com/openai/v1")

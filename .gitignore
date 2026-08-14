@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Ambiente virtual
+.venv/
+venv/
+
+# Ferramentas e IDEs
+.vscode/
+.idea/
+
+# Artefatos de distribuição Windows
+build/
+dist/
+release/
+*.spec.bak
+
+# R e sistema
+.Rhistory
+.RData
+.Rproj.user/
+.DS_Store
+Thumbs.db

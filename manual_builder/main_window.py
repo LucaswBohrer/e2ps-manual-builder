@@ -445,29 +445,33 @@ class MainWindow(QMainWindow):
         )
 
     def open_e2ps_project(self) -> None:
-        """Open a portable .e2ps project and restore it to this app session."""
+        """Ask for a portable project and load it into this application window."""
         filename, _ = QFileDialog.getOpenFileName(
             self,
             "Abrir Projeto E2PS Manual Builder",
             "",
             "E2PS Manual Builder Project (*.e2ps *.emb)",
         )
-        if not filename:
-            return
+        if filename:
+            self.open_e2ps_project_file(Path(filename))
+
+    def open_e2ps_project_file(self, filename: Path) -> bool:
+        """Load a portable project from a known path, including a Windows file association."""
+        filename = Path(filename)
         restore_root = Path(self._temp_dir.name) / "restored_e2ps_project"
         if restore_root.exists():
             import shutil
             shutil.rmtree(restore_root)
         try:
-            loaded = self._project_files.load_project(Path(filename), restore_root)
+            loaded = self._project_files.load_project(filename, restore_root)
         except Exception as error:
             QMessageBox.critical(self, "Erro ao abrir projeto", str(error))
-            return
+            return False
         self._pages = loaded.pages
         self._sections = loaded.sections
         self._cover_image_path = loaded.cover_image_path
         self.cover_path_input.setText(str(loaded.cover_image_path) if loaded.cover_image_path else "")
-        self._project_path = Path(filename)
+        self._project_path = filename
         self._apply_project_metadata(loaded.metadata)
         self._populate_page_list()
         self._refresh_sections()
@@ -481,9 +485,10 @@ class MainWindow(QMainWindow):
         self.save_project_action.setEnabled(has_pages)
         self.progress.setVisible(False)
         self.statusBar().showMessage(
-            f"Projeto aberto: {Path(filename).name} ({len(self._pages)} páginas, {len(self._sections)} seções)",
+            f"Projeto aberto: {filename.name} ({len(self._pages)} páginas, {len(self._sections)} seções)",
             7000,
         )
+        return True
 
     def open_pdf(self) -> None:
         """Open a PDF file and start background rendering."""
