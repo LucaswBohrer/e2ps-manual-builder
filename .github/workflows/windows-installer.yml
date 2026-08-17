@@ -49,12 +49,13 @@ jobs:
           retention-days: 30
 
       - name: Upload installer to the GitHub Release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'v1.0.4' }}
         run: |
-          gh release upload "${{ github.ref_name }}" `
+          gh release upload "$env:RELEASE_TAG" `
             "release/E2PS-Manual-Builder-Setup-1.0.0.exe" `
             --repo "${{ github.repository }}" `
             --clobber
