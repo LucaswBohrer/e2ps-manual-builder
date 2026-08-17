@@ -67,11 +67,16 @@ class MainWindow(QMainWindow):
         self._pdf_structure_worker: PdfStructureWorker | None = None
         self._last_pdf_structure_plan: PdfStructurePlan | None = None
         self._export_worker: MultilingualExportWorker | None = None
+        self._render_generation = 0
+        self._html_render_generation = 0
+        self._pdf_structure_generation = 0
+        self._export_generation = 0
         self._ai_service = ManualAIService()
         self._cover_image_path: Path | None = None
         self._project_path: Path | None = None
         self._project_files = ProjectFileService()
         self._settings = QSettings("E2PS", "ManualBuilder")
+        self._project_generation = 0
 
         toolbar = QToolBar("Actions")
         toolbar.setMovable(False)
@@ -96,6 +101,13 @@ class MainWindow(QMainWindow):
         self.save_project_action.setEnabled(False)
         self.save_project_action.triggered.connect(self.save_e2ps_project)
         toolbar.addAction(self.save_project_action)
+
+        self.clear_all_button = QPushButton("🧹 Limpar tudo / Novo manual")
+        self.clear_all_button.setToolTip(
+            "Descarta páginas, recortes, capa, seções e textos do manual atual e inicia outro."
+        )
+        self.clear_all_button.clicked.connect(self.clear_all)
+        toolbar.addWidget(self.clear_all_button)
         toolbar.addSeparator()
         toolbar.addWidget(QLabel("Manual title:"))
         self.title_input = QLineEdit("E2PS Technical Manual")
@@ -364,6 +376,82 @@ class MainWindow(QMainWindow):
         self._settings.setValue("ai/model", self.model_input.text().strip())
         self._settings.sync()
 
+    def _reset_project_state(self) -> None:
+        """Return the window to a blank-manual state without removing AI settings."""
+        self._project_generation += 1
+        self._pages.clear()
+        self._sections.clear()
+        self._last_pdf_structure_plan = None
+        self._project_path = None
+        self._cover_image_path = None
+        self._ai_service.reset_chat_history()
+
+        self.page_list.clear()
+        self.section_tree.clear()
+        self.preview.clear()
+        self.preview.setText("Abra um PDF, HTML ou imagens para começar")
+        self.export_mode_combo.blockSignals(True)
+        self.export_mode_combo.setCurrentIndex(0)
+        self.export_mode_combo.blockSignals(False)
+        self.export_mode_combo.setEnabled(False)
+
+        self.title_input.setText("E2PS Technical Manual")
+        self.code_input.clear()
+        today = date.today()
+        self.year_input.setCurrentText(str(today.year))
+        self.semester_input.setCurrentIndex(0 if today.month <= 6 else 1)
+        source_index = self.source_language.findData("pt")
+        if source_index >= 0:
+            self.source_language.setCurrentIndex(source_index)
+        self.pt_language.setChecked(True)
+        self.en_language.setChecked(True)
+        self.es_language.setChecked(False)
+        self.cover_path_input.clear()
+        self.section_name.clear()
+        self.subsection_name.clear()
+        self.content_text_input.clear()
+        self.chat_input.clear()
+        self.chat_display.setPlainText(
+            "Bem-vindo! Faça perguntas à IA sobre o manual ou clique em "
+            "'Suggest Structure' para obter dicas de distribuição de páginas.\n"
+            "(Dica: Funciona com assistente inteligente embutido ou com sua API Key inserida acima)."
+        )
+
+        self.progress.setValue(0)
+        self.progress.setVisible(False)
+        for widget in (
+            self.select_all_button,
+            self.clear_selection_button,
+            self.crop_page_button,
+            self.ai_suggest_button,
+            self.add_section_button,
+            self.remove_section_button,
+            self.rename_section_button,
+            self.edit_content_button,
+            self.add_subsection_button,
+            self.add_text_block_button,
+            self.ai_generate_text_button,
+            self.save_project_action,
+            self.export_button,
+        ):
+            widget.setEnabled(False)
+        self.content_text_input.setEnabled(False)
+        self.statusBar().showMessage("Novo manual iniciado. O projeto anterior foi limpo.", 7000)
+
+    def clear_all(self) -> None:
+        """Ask for confirmation and start a completely blank manual."""
+        answer = QMessageBox.question(
+            self,
+            "Limpar tudo e iniciar novo manual",
+            "Isso apagará da janela atual todas as páginas, recortes, capa, seções, "
+            "subseções e textos não salvos. A configuração da IA será mantida.\n\n"
+            "Deseja continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._reset_project_state()
+
     def _project_metadata(self) -> dict[str, object]:
         """Return editable UI data that belongs in a portable project archive."""
         return {
@@ -497,20 +585,9 @@ class MainWindow(QMainWindow):
         )
         if not file_path:
             return
-        self._pages.clear()
-        self._sections.clear()
-        self._last_pdf_structure_plan = None
-        self._project_path = None
-        self.page_list.clear()
-        self.section_tree.clear()
-        self.export_button.setEnabled(False)
-        self.save_project_action.setEnabled(False)
-        self.select_all_button.setEnabled(False)
-        self.clear_selection_button.setEnabled(False)
-        self.crop_page_button.setEnabled(False)
-        self.ai_suggest_button.setEnabled(False)
-        self.add_section_button.setEnabled(False)
+        self._reset_project_state()
 
+        self._render_generation = self._project_generation
         self._render_worker = PdfRenderWorker(Path(file_path), Path(self._temp_dir.name))
         self._render_worker.progress_changed.connect(self._update_render_progress)
         self._render_worker.completed.connect(self._rendering_completed)
@@ -533,24 +610,13 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
-        self._pages.clear()
-        self._sections.clear()
-        self._last_pdf_structure_plan = None
-        self._project_path = None
-        self.page_list.clear()
-        self.section_tree.clear()
-        self.export_button.setEnabled(False)
-        self.save_project_action.setEnabled(False)
-        self.select_all_button.setEnabled(False)
-        self.clear_selection_button.setEnabled(False)
-        self.crop_page_button.setEnabled(False)
-        self.ai_suggest_button.setEnabled(False)
-        self.add_section_button.setEnabled(False)
+        self._reset_project_state()
 
         destination = Path(self._temp_dir.name) / "html_render"
         if destination.exists():
             import shutil
             shutil.rmtree(destination)
+        self._html_render_generation = self._project_generation
         self._html_render_worker = HtmlRenderWorker(Path(file_path), destination)
         self._html_render_worker.progress_changed.connect(self._update_render_progress)
         self._html_render_worker.completed.connect(self._html_rendering_completed)
@@ -573,19 +639,7 @@ class MainWindow(QMainWindow):
         if not file_paths:
             return
         
-        self._pages.clear()
-        self._sections.clear()
-        self._last_pdf_structure_plan = None
-        self._project_path = None
-        self.page_list.clear()
-        self.section_tree.clear()
-        self.export_button.setEnabled(False)
-        self.save_project_action.setEnabled(False)
-        self.select_all_button.setEnabled(False)
-        self.clear_selection_button.setEnabled(False)
-        self.crop_page_button.setEnabled(False)
-        self.ai_suggest_button.setEnabled(False)
-        self.add_section_button.setEnabled(False)
+        self._reset_project_state()
         
         pages = []
         temp_dir = Path(self._temp_dir.name)
@@ -628,6 +682,8 @@ class MainWindow(QMainWindow):
             self.progress.setValue(int((current / total) * 100))
 
     def _rendering_completed(self, pages: list[PdfPage]) -> None:
+        if self._render_generation != self._project_generation:
+            return
         self._pages = pages
         self._populate_page_list()
 
@@ -659,6 +715,7 @@ class MainWindow(QMainWindow):
             return
         self._last_pdf_structure_plan = None
         self.ai_suggest_button.setEnabled(False)
+        self._pdf_structure_generation = self._project_generation
         self._pdf_structure_worker = PdfStructureWorker(
             pdf_pages,
             self.title_input.text().strip(),
@@ -675,6 +732,8 @@ class MainWindow(QMainWindow):
 
     def _pdf_structure_completed(self, plan: PdfStructurePlan) -> None:
         """Convert the selected PDF outline into the same editable section models used by HTML."""
+        if self._pdf_structure_generation != self._project_generation:
+            return
         if not plan.sections:
             self._last_pdf_structure_plan = plan
             self.ai_suggest_button.setEnabled(True)
@@ -723,6 +782,8 @@ class MainWindow(QMainWindow):
 
     def _pdf_structure_failed(self, error: str) -> None:
         """Keep rendered pages available when background PDF analysis cannot run."""
+        if self._pdf_structure_generation != self._project_generation:
+            return
         message = (
             "As páginas foram carregadas, mas a estrutura automática do PDF não pôde ser criada: "
             f"{error}"
@@ -847,6 +908,9 @@ class MainWindow(QMainWindow):
         plan: HtmlStructurePlan,
     ) -> None:
         """Finalize an HTML import and turn its semantic outline into editable content."""
+        if self._html_render_generation != self._project_generation:
+            return
+        self._render_generation = self._project_generation
         self._rendering_completed(pages)
         created_sections = self._build_sections_from_html_plan(plan)
 
@@ -955,6 +1019,8 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Revisar imagens pendentes", message)
 
     def _rendering_failed(self, error: str) -> None:
+        if self._render_generation != self._project_generation and self._html_render_generation != self._project_generation:
+            return
         self.progress.setVisible(False)
         self.preview.setText("Não foi possível renderizar este arquivo")
         QMessageBox.critical(
@@ -1101,6 +1167,7 @@ class MainWindow(QMainWindow):
         key = self.api_key_input.text().strip()
         endpoint = self.base_url_input.text().strip()
         model_name = self.model_input.text().strip() or "llama-3.3-70b-versatile"
+        self._export_generation = self._project_generation
         self._export_worker = MultilingualExportWorker(
             Path(destination),
             self.title_input.text().strip(),
@@ -1582,6 +1649,8 @@ class MainWindow(QMainWindow):
 
     def _export_finished(self, project_dir: Path) -> None:
         """Handle successful export completion."""
+        if self._export_generation != self._project_generation:
+            return
         self.progress.setVisible(False)
         self.export_button.setEnabled(True)
         QMessageBox.information(
@@ -1593,6 +1662,8 @@ class MainWindow(QMainWindow):
 
     def _export_failed(self, error: str) -> None:
         """Handle export failure."""
+        if self._export_generation != self._project_generation:
+            return
         self.progress.setVisible(False)
         self.export_button.setEnabled(True)
         QMessageBox.critical(self, "Export Error", f"The project could not be exported.\n\n{error}")

@@ -76,6 +76,19 @@ class ManualAIService:
         else:
             self._client = None
 
+    def reset_chat_history(self) -> None:
+        """Forget the previous manual conversation while keeping API settings."""
+        system_message = self._chat_history[0] if self._chat_history else {
+            "role": "system",
+            "content": (
+                "You are a professional technical documentation assistant for E2PS manuals. "
+                "You analyze real extracted text from PDF pages, help the user structure manuals "
+                "logically, choose which pages belong to which sections, and write professional "
+                "technical descriptions in Portuguese."
+            ),
+        }
+        self._chat_history = [system_message]
+
     def test_connection(self) -> tuple[bool, str]:
         """Test API connection with a minimal request."""
         if self._client is None:

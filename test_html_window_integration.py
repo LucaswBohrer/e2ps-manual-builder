@@ -121,6 +121,42 @@ def main() -> None:
         window._move_selected_item(-1)
         assert window._sections[1].subsections[0].title == "Notas adicionais"
 
+        assert any(
+            "Limpar tudo" in action.text()
+            for action in window.findChildren(type(window.save_project_action))
+        ) or window.clear_all_button is not None
+        window._cover_image_path = root / "cover.png"
+        window.cover_path_input.setText(str(window._cover_image_path))
+        window.code_input.setText("04945")
+        window.section_name.setText("Seção antiga")
+        window.subsection_name.setText("Subseção antiga")
+        window.content_text_input.setPlainText("Texto antigo")
+        window.chat_input.setText("Pergunta antiga")
+
+        original_question = QMessageBox.question
+        QMessageBox.question = lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes
+        try:
+            window.clear_all()
+        finally:
+            QMessageBox.question = original_question
+
+        assert window._pages == []
+        assert window._sections == []
+        assert window._project_path is None
+        assert window._cover_image_path is None
+        assert window.cover_path_input.text() == ""
+        assert window.title_input.text() == "E2PS Technical Manual"
+        assert window.code_input.text() == ""
+        assert window.section_name.text() == ""
+        assert window.subsection_name.text() == ""
+        assert window.content_text_input.toPlainText() == ""
+        assert window.chat_input.text() == ""
+        assert window.section_tree.topLevelItemCount() == 0
+        assert window.page_list.count() == 0
+        assert not window.export_button.isEnabled()
+        assert not window.save_project_action.isEnabled()
+        assert "Bem-vindo!" in window.chat_display.toPlainText()
+
         window.close()
 
     app.quit()
