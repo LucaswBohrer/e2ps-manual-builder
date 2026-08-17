@@ -48,6 +48,34 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Create or reuse the GitHub Release
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'v1.0.4' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release view "$env:RELEASE_TAG" --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            $created = $false
+            for ($attempt = 1; $attempt -le 5; $attempt++) {
+              gh release create "$env:RELEASE_TAG" `
+                --repo "${{ github.repository }}" `
+                --title "E2PS Manual Builder $env:RELEASE_TAG" `
+                --notes "Windows installer for E2PS Manual Builder $env:RELEASE_TAG." `
+                --verify-tag
+              if ($LASTEXITCODE -eq 0) {
+                $created = $true
+                break
+              }
+              Start-Sleep -Seconds (10 * $attempt)
+            }
+            if (-not $created) {
+              throw "Could not create or find GitHub Release $env:RELEASE_TAG"
+            }
+          }
+
       - name: Upload installer to the GitHub Release
         if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         shell: pwsh
@@ -55,6 +83,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'v1.0.4' }}
         run: |
+          $ErrorActionPreference = 'Stop'
           gh release upload "$env:RELEASE_TAG" `
             "release/E2PS-Manual-Builder-Setup-1.0.0.exe" `
             --repo "${{ github.repository }}" `
