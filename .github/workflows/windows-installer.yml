@@ -50,8 +50,13 @@ jobs:
 
       - name: Publish installer in the GitHub Release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          name: E2PS Manual Builder ${{ github.ref_name }}
-          generate_release_notes: true
-          files: release/E2PS-Manual-Builder-Setup-1.0.0.exe
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "release/E2PS-Manual-Builder-Setup-1.0.0.exe" `
+            --repo "${{ github.repository }}" `
+            --title "E2PS Manual Builder ${{ github.ref_name }}" `
+            --generate-notes `
+            --verify-tag
