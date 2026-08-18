@@ -55,7 +55,7 @@ A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já in
 |:--|:--|
 | **Importação de PDF, imagens e HTML** | Carrega manuais em vários formatos em uma única interface visual. |
 | **Estrutura automática editável** | Sugere seções e subseções com base no documento, mantendo a edição final sob controle do usuário. |
-| **Recortes ilimitados** | Crie vários recortes da mesma página para separar tabelas, diagramas e observações. |
+| **Recortes ilimitados** | Crie vários recortes da mesma página para separar tabelas, diagramas e observações, agora com zoom e navegação para selecionar detalhes com precisão. |
 | **Editor de seções** | Renomeie, crie, exclua e reordene seções e subseções a qualquer momento. |
 | **Texto entre figuras** | Insira avisos, instruções, listas e explicações antes, entre ou depois das imagens. |
 | **Capa personalizada** | Inclua a imagem de capa diretamente no projeto. |
@@ -96,7 +96,7 @@ Use **Open PDF**, **Open Images** ou **Open HTML**. A origem é convertida em p�
 
 ### 2. Crie recortes e selecione conteúdo
 
-Use a ferramenta de recorte para separar uma tabela, um diagrama elétrico ou uma observação dentro da mesma página. Cada recorte pode ser inserido em uma parte diferente do manual.
+Use a ferramenta de recorte para separar uma tabela, um diagrama elétrico ou uma observação dentro da mesma página. Cada recorte pode ser inserido em uma parte diferente do manual. Na tela de recorte, use **+**, **−**, o controle deslizante ou **Ctrl + roda do mouse** para ampliar e reduzir. Quando a página estiver ampliada, arraste com o **botão do meio do mouse** ou use as barras de rolagem para navegar até a área específica; o retângulo selecionado continua sendo convertido para os pixels originais da imagem.
 
 ### 3. Organize o manual
 
