@@ -178,6 +178,7 @@ A compilação requer R, Pandoc, os pacotes R necessários e uma distribuição 
 | Situação | Ação recomendada |
 |:--|:--|
 | O instalador não abre | Baixe novamente pela Release oficial e confirme se o download foi concluído. Se o Windows exibir proteção adicional, use somente o arquivo vindo do repositório oficial. |
+| `DeleteFile falhou, código 5` ou `Acesso negado` ao atualizar | Feche o E2PS Manual Builder e tente novamente. As versões novas do instalador já solicitam o fechamento automático do programa; se o erro persistir, abra o Gerenciador de Tarefas, finalize `E2PSManualBuilder.exe` e execute o instalador novamente. Não escolha **Ignorar este arquivo**, pois isso mantém o executável antigo e as funções novas — como capas em qualquer extensão — não serão instaladas. |
 | Erro 401 na IA | Revise a chave e a URL-base do provedor. |
 | Erro 404 de modelo | Informe um modelo que exista na conta e no provedor configurados. |
 | Erro 413 ou limite de requisição | Reduza a quantidade de páginas analisadas de uma vez; para PDFs grandes, trabalhe por seção. |

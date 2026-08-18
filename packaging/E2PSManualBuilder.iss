@@ -26,6 +26,10 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
 ArchitecturesAllowed=x64
+; Let Inno Setup close a running older E2PSManualBuilder.exe before replacing it.
+CloseApplications=yes
+CloseApplicationsFilter={#AppExeName}
+RestartApplications=yes
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
