@@ -58,7 +58,7 @@ A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já in
 | **Recortes ilimitados** | Crie vários recortes da mesma página para separar tabelas, diagramas e observações, agora com zoom e navegação para selecionar detalhes com precisão. |
 | **Editor de seções** | Renomeie, crie, exclua e reordene seções e subseções a qualquer momento. |
 | **Texto entre figuras** | Insira avisos, instruções, listas e explicações antes, entre ou depois das imagens. |
-| **Capa personalizada** | Inclua a imagem de capa diretamente no projeto. |
+| **Capa personalizada** | Selecione qualquer arquivo de imagem, independentemente da extensão; o aplicativo valida o conteúdo e converte automaticamente para `Capa.png`. |
 | **Assistente de IA** | Faça perguntas sobre o manual, obtenha sugestões de estrutura e gere textos de apoio. |
 | **Tradução técnica** | Exporte em português, inglês ou espanhol, escolhendo texto/tabela ou imagem para cada conteúdo. |
 | **Projetos `.e2ps`** | Salve e reabra o trabalho completo sem perder a montagem já realizada. |
@@ -91,6 +91,8 @@ flowchart LR
 ### 1. Carregue o material
 
 Use **Open PDF**, **Open Images** ou **Open HTML**. A origem é convertida em páginas com miniaturas e pré-visualização. Em PDFs, o aplicativo aproveita o texto selecionável; em HTML, aproveita a hierarquia de cabeçalhos e identifica as imagens que precisam ser revisadas ou recortadas.
+
+Na área **Imagem da capa**, selecione o arquivo sem depender da extensão. O E2PS tenta reconhecer o conteúdo real, incluindo PNG, JPEG, WebP, AVIF, SVG e outros formatos disponíveis no ambiente. A imagem escolhida é normalizada para PNG antes de ser salva no projeto e exportada como `Capa.png`. Se o arquivo não for uma imagem válida, o aplicativo informa o erro sem alterar a capa anterior.
 
 > Para carregar um HTML com fidelidade, mantenha o arquivo `.html` junto de suas imagens, folhas de estilo e outros recursos locais.
 

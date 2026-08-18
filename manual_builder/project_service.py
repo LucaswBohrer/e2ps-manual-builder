@@ -11,6 +11,7 @@ from typing import Callable
 
 from manual_builder.models import ManualSection, ManualSubsection, PdfPage
 from manual_builder.translation_service import TranslationService, create_translation_service
+from manual_builder.image_utils import convert_image_to_png
 
 
 RMD_TEMPLATE = r"""---
@@ -844,15 +845,16 @@ class ProjectExportService:
         return rendered.strip()
 
     def _copy_standard_assets(self, project_dir: Path, cover_image_path: Path | None = None) -> None:
-        """Copy logo, typography and cover image shipped with the E2PS standard package."""
+        """Copy standard assets and normalize any custom cover to a valid PNG."""
+        has_custom_cover = cover_image_path is not None and cover_image_path.is_file()
         for asset in self._asset_directory.iterdir():
             if asset.is_file():
-                if asset.name.lower() == "capa.png" and cover_image_path is not None and cover_image_path.is_file():
+                if asset.name.lower() == "capa.png" and has_custom_cover:
                     continue
                 shutil.copy2(asset, project_dir / asset.name)
-        
-        if cover_image_path is not None and cover_image_path.is_file():
-            shutil.copy2(cover_image_path, project_dir / "Capa.png")
+
+        if has_custom_cover:
+            convert_image_to_png(cover_image_path, project_dir / "Capa.png")
 
     @staticmethod
     def _safe_name(value: str) -> str:

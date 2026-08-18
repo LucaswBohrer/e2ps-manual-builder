@@ -24,6 +24,7 @@ hiddenimports = [
     "PySide6.QtGui",
     "PySide6.QtWidgets",
     "PySide6.QtPrintSupport",
+    "PySide6.QtSvg",
 ]
 
 

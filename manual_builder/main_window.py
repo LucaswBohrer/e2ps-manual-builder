@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 
 from manual_builder.models import ManualSection, ManualSubsection, PdfPage
 from manual_builder.ai_service import ManualAIService, PdfStructurePlan
+from manual_builder.image_utils import convert_image_to_png
 from manual_builder.content_editor_dialog import ContentEditorDialog
 from manual_builder.crop_dialog import CropDialog
 from manual_builder.export_worker import MultilingualExportWorker
@@ -313,10 +314,10 @@ class MainWindow(QMainWindow):
         language_layout.addWidget(self.en_language)
         language_layout.addWidget(self.es_language)
 
-        language_layout.addWidget(QLabel("Manual Cover Image (Capa.png):"))
+        language_layout.addWidget(QLabel("Imagem da capa (qualquer arquivo de imagem → Capa.png):"))
         cover_layout = QHBoxLayout()
         self.cover_path_input = QLineEdit()
-        self.cover_path_input.setPlaceholderText("Select cover image (optional)...")
+        self.cover_path_input.setPlaceholderText("Selecione qualquer arquivo de imagem (opcional)...")
         self.cover_path_input.setReadOnly(True)
         cover_button = QPushButton("Browse...")
         cover_button.clicked.connect(self._browse_cover_image)
@@ -407,6 +408,7 @@ class MainWindow(QMainWindow):
         self.en_language.setChecked(True)
         self.es_language.setChecked(False)
         self.cover_path_input.clear()
+        self.cover_path_input.setToolTip("")
         self.section_name.clear()
         self.subsection_name.clear()
         self.content_text_input.clear()
@@ -1612,13 +1614,37 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     def _browse_cover_image(self) -> None:
-        """Open file dialog to select manual cover image."""
+        """Select any file, validate its image content and normalize it to PNG."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select Cover Image", "", "Image Files (*.png *.jpg *.jpeg)"
+            self,
+            "Selecionar imagem da capa",
+            "",
+            "Todos os arquivos (*.*)",
         )
-        if file_path:
-            self._cover_image_path = Path(file_path)
-            self.cover_path_input.setText(file_path)
+        if not file_path:
+            return
+
+        source = Path(file_path)
+        normalized_path = Path(self._temp_dir.name) / "cover_image.png"
+        try:
+            convert_image_to_png(source, normalized_path)
+        except Exception as error:
+            QMessageBox.warning(
+                self,
+                "Imagem de capa inválida",
+                f"Não foi possível abrir o arquivo como imagem:\n{error}",
+            )
+            return
+
+        self._cover_image_path = normalized_path
+        self.cover_path_input.setText(f"{source.name}  →  PNG")
+        self.cover_path_input.setToolTip(
+            f"Arquivo original: {source}\nImagem normalizada: {normalized_path}"
+        )
+        self.statusBar().showMessage(
+            f"Capa convertida para PNG: {source.name}",
+            6000,
+        )
 
     def _selected_languages(self) -> list[str]:
         """Return list of selected language codes."""
