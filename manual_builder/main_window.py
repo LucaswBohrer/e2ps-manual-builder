@@ -103,9 +103,9 @@ class MainWindow(QMainWindow):
         self.save_project_action.triggered.connect(self.save_e2ps_project)
         toolbar.addAction(self.save_project_action)
 
-        self.clear_all_button = QPushButton("🧹 Limpar tudo / Novo manual")
+        self.clear_all_button = QPushButton("🧹 Clear All / New Manual")
         self.clear_all_button.setToolTip(
-            "Descarta páginas, recortes, capa, seções e textos do manual atual e inicia outro."
+            "Discard pages, crops, cover, sections, and text from the current manual and start a new one."
         )
         self.clear_all_button.clicked.connect(self.clear_all)
         toolbar.addWidget(self.clear_all_button)
@@ -140,7 +140,43 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(self.export_project)
         toolbar.addWidget(self.export_button)
 
-        # Left panel: PDF Pages
+        # E2PS V2 brand header: keep the product identity visible inside the workspace.
+        brand_header = QWidget()
+        brand_header.setObjectName("brand_header")
+        brand_layout = QHBoxLayout(brand_header)
+        brand_layout.setContentsMargins(14, 9, 14, 9)
+        brand_logo = QLabel()
+        brand_logo.setFixedSize(94, 54)
+        logo_path = Path(__file__).resolve().parent / "assets" / "LogoHeader.png"
+        logo_pixmap = QPixmap(str(logo_path))
+        if not logo_pixmap.isNull():
+            brand_logo.setPixmap(
+                logo_pixmap.scaled(
+                    brand_logo.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        else:
+            brand_logo.setText("E2PS")
+        brand_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand_layout.addWidget(brand_logo)
+
+        brand_text_layout = QVBoxLayout()
+        brand_title = QLabel("E2PS Manual Builder V2")
+        brand_title.setObjectName("brand_title")
+        brand_subtitle = QLabel("Technical manual workspace · AI-assisted documentation")
+        brand_subtitle.setObjectName("brand_subtitle")
+        brand_text_layout.addWidget(brand_title)
+        brand_text_layout.addWidget(brand_subtitle)
+        brand_layout.addLayout(brand_text_layout, 1)
+
+        brand_badge = QLabel("E2PS")
+        brand_badge.setObjectName("brand_badge")
+        brand_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand_layout.addWidget(brand_badge)
+
+        # Left panel: source pages and crops
         self.page_list = QListWidget()
         self.page_list.setMinimumWidth(230)
         self.page_list.currentItemChanged.connect(self._show_current_page)
@@ -155,18 +191,18 @@ class MainWindow(QMainWindow):
         self.crop_page_button.clicked.connect(self.crop_current_page)
 
         self.export_mode_combo = QComboBox()
-        self.export_mode_combo.addItem("Modo: Imagem Traduzida", "image")
-        self.export_mode_combo.addItem("Modo: Texto/Tabela (OCR)", "text")
-        self.export_mode_combo.setToolTip("Escolha como esta página será exportada no manual final.")
+        self.export_mode_combo.addItem("Mode: Translated Image", "image")
+        self.export_mode_combo.addItem("Mode: Text/Table (OCR)", "text")
+        self.export_mode_combo.setToolTip("Choose how this page will be exported in the final manual.")
         self.export_mode_combo.setEnabled(False)
         self.export_mode_combo.currentIndexChanged.connect(self._change_page_export_mode)
         
-        page_panel = QGroupBox("Páginas, HTML e Recortes")
+        page_panel = QGroupBox("Source Pages, HTML & Crops")
         page_layout = QVBoxLayout(page_panel)
         page_layout.addWidget(self.select_all_button)
         page_layout.addWidget(self.clear_selection_button)
         page_layout.addWidget(self.crop_page_button)
-        page_layout.addWidget(QLabel("Exportar página selecionada como:"))
+        page_layout.addWidget(QLabel("Export selected page as:"))
         page_layout.addWidget(self.export_mode_combo)
         page_layout.addWidget(self.page_list)
 
@@ -176,7 +212,7 @@ class MainWindow(QMainWindow):
         self.ai_suggest_button.clicked.connect(self.ai_suggest_structure)
 
         self.section_name = QLineEdit()
-        self.section_name.setPlaceholderText("Section name, e.g. 1. Instalação")
+        self.section_name.setPlaceholderText("Section name, e.g. 1. Installation")
         self.add_section_button = QPushButton("Create Section (Checked Pages)")
         self.add_section_button.setEnabled(False)
         self.add_section_button.clicked.connect(self.add_section)
@@ -189,7 +225,7 @@ class MainWindow(QMainWindow):
         self.rename_section_button = QPushButton("Rename Selected")
         self.rename_section_button.setEnabled(False)
         self.rename_section_button.clicked.connect(self.rename_selected_item)
-        self.edit_content_button = QPushButton("Editar Conteúdo Selecionado")
+        self.edit_content_button = QPushButton("Edit Selected Content")
         self.edit_content_button.setEnabled(False)
         self.edit_content_button.clicked.connect(self.edit_selected_content)
         
@@ -201,15 +237,15 @@ class MainWindow(QMainWindow):
 
         # Flexible content insertion (Text block or Page block)
         self.content_text_input = QTextEdit()
-        self.content_text_input.setPlaceholderText("Escreva aqui texto técnico/descritivo para inserir no manual...")
+        self.content_text_input.setPlaceholderText("Write technical or descriptive text to insert into the manual...")
         self.content_text_input.setMaximumHeight(80)
         self.content_text_input.setEnabled(False)
 
-        self.add_text_block_button = QPushButton("➕ Inserir Bloco de Texto na Seção")
+        self.add_text_block_button = QPushButton("➕ Insert Text Block")
         self.add_text_block_button.setEnabled(False)
         self.add_text_block_button.clicked.connect(self.add_text_block)
 
-        self.ai_generate_text_button = QPushButton("🤖 IA: Gerar Texto Técnico")
+        self.ai_generate_text_button = QPushButton("🤖 AI: Generate Technical Text")
         self.ai_generate_text_button.setEnabled(False)
         self.ai_generate_text_button.clicked.connect(self.ai_generate_section_text)
 
@@ -217,7 +253,7 @@ class MainWindow(QMainWindow):
         self.section_tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.section_tree.customContextMenuRequested.connect(self._show_section_context_menu)
 
-        section_panel = QGroupBox("Manual Structure & Content Editor")
+        section_panel = QGroupBox("Manual Structure & Content")
         section_layout = QVBoxLayout(section_panel)
         section_layout.addWidget(self.ai_suggest_button)
         section_layout.addWidget(self.section_name)
@@ -228,7 +264,7 @@ class MainWindow(QMainWindow):
         section_layout.addWidget(self.add_subsection_button)
         section_layout.addWidget(self.section_tree)
         
-        section_layout.addWidget(QLabel("Inserir Texto Personalizado (em qualquer parte):"))
+        section_layout.addWidget(QLabel("Insert custom text anywhere:"))
         section_layout.addWidget(self.content_text_input)
         
         text_btn_layout = QHBoxLayout()
@@ -241,26 +277,26 @@ class MainWindow(QMainWindow):
         right_panel_widget = QWidget()
         right_layout = QVBoxLayout(right_panel_widget)
 
-        ai_chat_group = QGroupBox("🤖 Manus AI Assistant & Chat")
+        ai_chat_group = QGroupBox("🤖 E2PS AI Assistant & Chat")
         ai_chat_layout = QVBoxLayout(ai_chat_group)
         
         # API Key, Base URL & Model input for free providers (Groq, etc.)
         api_key_layout = QHBoxLayout()
         self.api_key_input = QLineEdit()
-        self.api_key_input.setPlaceholderText("API Key (ex: gsk_...)")
+        self.api_key_input.setPlaceholderText("API key (e.g. gsk_...)")
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.api_key_input.textChanged.connect(self._on_api_key_changed)
         
         self.base_url_input = QLineEdit()
-        self.base_url_input.setPlaceholderText("Base URL (ex: https://api.groq.com/openai/v1)")
+        self.base_url_input.setPlaceholderText("Base URL (e.g. https://api.groq.com/openai/v1)")
         
         self.model_input = QLineEdit("llama-3.3-70b-versatile")
-        self.model_input.setPlaceholderText("Model (ex: llama-3.3-70b-versatile)")
+        self.model_input.setPlaceholderText("Model (e.g. llama-3.3-70b-versatile)")
         
-        save_key_button = QPushButton("Salvar Configs")
+        save_key_button = QPushButton("Save Settings")
         save_key_button.clicked.connect(self._save_api_key)
         
-        test_conn_button = QPushButton("Testar Conexão")
+        test_conn_button = QPushButton("Test Connection")
         test_conn_button.clicked.connect(self._test_ai_connection)
         
         api_key_layout.addWidget(self.api_key_input)
@@ -272,20 +308,20 @@ class MainWindow(QMainWindow):
 
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
-        self.chat_display.setPlainText("Bem-vindo! Faça perguntas à IA sobre o manual ou clique em 'Suggest Structure' para obter dicas de distribuição de páginas.\n(Dica: Funciona com assistente inteligente embutido ou com sua API Key inserida acima).")
+        self.chat_display.setPlainText("Welcome to the E2PS AI assistant. Ask questions about the manual or click 'Suggest Structure' for evidence-based page recommendations.\n\nTip: configure your API key above, or use the built-in local analysis when available.")
         self.chat_input = QLineEdit()
-        self.chat_input.setPlaceholderText("Ex: Qual seção é ideal para a página 5?")
+        self.chat_input.setPlaceholderText("e.g. Which section fits page 5 best?")
         self.chat_input.returnPressed.connect(self.send_chat_message)
-        self.chat_send_button = QPushButton("Enviar Pergunta à IA")
+        self.chat_send_button = QPushButton("Ask AI")
         self.chat_send_button.clicked.connect(self.send_chat_message)
         
         chat_input_layout = QHBoxLayout()
         chat_input_layout.addWidget(self.chat_input)
         chat_input_layout.addWidget(self.chat_send_button)
 
-        self.image_review_button = QPushButton("🤖 Revisar Imagens Pendentes")
+        self.image_review_button = QPushButton("🤖 Review Pending Images")
         self.image_review_button.setToolTip(
-            "Lista, por seção e subseção, as imagens do HTML que precisam de captura ou recorte."
+            "List, by section and subsection, HTML images that still need a capture or crop."
         )
         self.image_review_button.clicked.connect(
             lambda: self._show_pending_image_review(show_dialog=True)
@@ -314,10 +350,10 @@ class MainWindow(QMainWindow):
         language_layout.addWidget(self.en_language)
         language_layout.addWidget(self.es_language)
 
-        language_layout.addWidget(QLabel("Imagem da capa (qualquer arquivo de imagem → Capa.png):"))
+        language_layout.addWidget(QLabel("Cover image (any image file → Capa.png):"))
         cover_layout = QHBoxLayout()
         self.cover_path_input = QLineEdit()
-        self.cover_path_input.setPlaceholderText("Selecione qualquer arquivo de imagem (opcional)...")
+        self.cover_path_input.setPlaceholderText("Choose any image file (optional)...")
         self.cover_path_input.setReadOnly(True)
         cover_button = QPushButton("Browse...")
         cover_button.clicked.connect(self._browse_cover_image)
@@ -330,7 +366,7 @@ class MainWindow(QMainWindow):
         # Right panel now only contains AI Chat and Translation Settings
         # Preview gets its own central dedicated wide panel
 
-        self.preview = QLabel("Abra um PDF, HTML ou imagens para começar")
+        self.preview = QLabel("Open a PDF, HTML file, or images to begin")
         self.preview.setObjectName("preview")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumSize(600, 750)
@@ -339,7 +375,7 @@ class MainWindow(QMainWindow):
         preview_scroll.setWidgetResizable(True)
         preview_scroll.setWidget(self.preview)
         
-        preview_group = QGroupBox("📄 Pré-visualização Ampliada do Manual")
+        preview_group = QGroupBox("📄 Manual Page Preview")
         preview_layout = QVBoxLayout(preview_group)
         preview_layout.addWidget(preview_scroll)
 
@@ -350,8 +386,19 @@ class MainWindow(QMainWindow):
         splitter.addWidget(section_panel)     # 3. Sections & mixed content editor
         splitter.addWidget(right_panel_widget) # 4. AI Chat & Translation / Cover settings
         
-        splitter.setSizes([200, 500, 350, 450])
-        self.setCentralWidget(splitter)
+        splitter.setSizes([220, 520, 380, 430])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3)
+        splitter.setStretchFactor(2, 2)
+        splitter.setStretchFactor(3, 2)
+
+        workspace = QWidget()
+        workspace_layout = QVBoxLayout(workspace)
+        workspace_layout.setContentsMargins(10, 8, 10, 6)
+        workspace_layout.setSpacing(8)
+        workspace_layout.addWidget(brand_header)
+        workspace_layout.addWidget(splitter, 1)
+        self.setCentralWidget(workspace)
 
         self.progress = QProgressBar()
         self.progress.setVisible(False)
@@ -390,7 +437,7 @@ class MainWindow(QMainWindow):
         self.page_list.clear()
         self.section_tree.clear()
         self.preview.clear()
-        self.preview.setText("Abra um PDF, HTML ou imagens para começar")
+        self.preview.setText("Open a PDF, HTML file, or images to begin")
         self.export_mode_combo.blockSignals(True)
         self.export_mode_combo.setCurrentIndex(0)
         self.export_mode_combo.blockSignals(False)
@@ -414,9 +461,9 @@ class MainWindow(QMainWindow):
         self.content_text_input.clear()
         self.chat_input.clear()
         self.chat_display.setPlainText(
-            "Bem-vindo! Faça perguntas à IA sobre o manual ou clique em "
-            "'Suggest Structure' para obter dicas de distribuição de páginas.\n"
-            "(Dica: Funciona com assistente inteligente embutido ou com sua API Key inserida acima)."
+            "Welcome to the E2PS AI assistant. Ask questions about the manual or click "
+            "'Suggest Structure' for evidence-based page recommendations.\n"
+            "Tip: configure your API key above, or use the built-in local analysis when available."
         )
 
         self.progress.setValue(0)
@@ -438,16 +485,16 @@ class MainWindow(QMainWindow):
         ):
             widget.setEnabled(False)
         self.content_text_input.setEnabled(False)
-        self.statusBar().showMessage("Novo manual iniciado. O projeto anterior foi limpo.", 7000)
+        self.statusBar().showMessage("New manual started. The previous project was cleared.", 7000)
 
     def clear_all(self) -> None:
         """Ask for confirmation and start a completely blank manual."""
         answer = QMessageBox.question(
             self,
-            "Limpar tudo e iniciar novo manual",
-            "Isso apagará da janela atual todas as páginas, recortes, capa, seções, "
-            "subseções e textos não salvos. A configuração da IA será mantida.\n\n"
-            "Deseja continuar?",
+            "Clear all and start a new manual",
+            "This will remove all pages, crops, cover, sections, "
+            "subsections, and unsaved text from the current workspace. AI settings will be kept.\n\n"
+            "Do you want to continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -503,12 +550,12 @@ class MainWindow(QMainWindow):
     def save_e2ps_project(self) -> None:
         """Save all manual assets and editable structure to a portable .e2ps project file."""
         if not self._pages:
-            QMessageBox.warning(self, "Projeto vazio", "Abra páginas ou imagens antes de salvar o projeto.")
+            QMessageBox.warning(self, "Empty project", "Open pages or images before saving the project.")
             return
         suggested_name = self._project_path or Path(self.title_input.text().strip() or "manual_e2ps").with_suffix(".e2ps")
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Salvar Projeto E2PS Manual Builder",
+            "Save E2PS Manual Builder Project",
             str(suggested_name),
             "E2PS Manual Builder Project (*.e2ps)",
         )
@@ -523,22 +570,22 @@ class MainWindow(QMainWindow):
                 self._cover_image_path,
             )
         except Exception as error:
-            QMessageBox.critical(self, "Erro ao salvar projeto", str(error))
+            QMessageBox.critical(self, "Project save error", str(error))
             return
         self._project_path = saved_path
-        self.statusBar().showMessage(f"Projeto salvo em {saved_path.name}", 6000)
+        self.statusBar().showMessage(f"Project saved as {saved_path.name}", 6000)
         QMessageBox.information(
             self,
-            "Projeto salvo",
-            "O arquivo .e2ps foi salvo com as páginas, recortes, capa, seções, subseções e blocos de texto.\n\n"
-            "Por segurança, a chave da IA não é incluída no arquivo .e2ps; ela permanece apenas neste computador.",
+            "Project saved",
+            "The .e2ps file was saved with pages, crops, cover, sections, subsections, and text blocks.\n\n"
+            "For security, the AI key is not included in the .e2ps file; it remains only on this computer.",
         )
 
     def open_e2ps_project(self) -> None:
         """Ask for a portable project and load it into this application window."""
         filename, _ = QFileDialog.getOpenFileName(
             self,
-            "Abrir Projeto E2PS Manual Builder",
+            "Open E2PS Manual Builder Project",
             "",
             "E2PS Manual Builder Project (*.e2ps *.emb)",
         )
@@ -555,7 +602,7 @@ class MainWindow(QMainWindow):
         try:
             loaded = self._project_files.load_project(filename, restore_root)
         except Exception as error:
-            QMessageBox.critical(self, "Erro ao abrir projeto", str(error))
+            QMessageBox.critical(self, "Project open error", str(error))
             return False
         self._pages = loaded.pages
         self._sections = loaded.sections
@@ -575,7 +622,7 @@ class MainWindow(QMainWindow):
         self.save_project_action.setEnabled(has_pages)
         self.progress.setVisible(False)
         self.statusBar().showMessage(
-            f"Projeto aberto: {filename.name} ({len(self._pages)} páginas, {len(self._sections)} seções)",
+            f"Project opened: {filename.name} ({len(self._pages)} pages, {len(self._sections)} sections)",
             7000,
         )
         return True
@@ -605,9 +652,9 @@ class MainWindow(QMainWindow):
         """Open a static HTML/HTM manual and render it as editable visual pages."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Abrir Manual HTML",
+            "Open HTML Manual",
             "",
-            "Arquivos HTML (*.html *.htm)",
+            "HTML files (*.html *.htm)",
         )
         if not file_path:
             return
@@ -628,15 +675,15 @@ class MainWindow(QMainWindow):
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self._html_render_worker.start()
-        self.statusBar().showMessage("Lendo o HTML, extraindo texto-fonte e criando pré-visualizações…")
+        self.statusBar().showMessage("Reading HTML, extracting source text, and creating previews…")
 
     def open_images(self) -> None:
         """Open multiple image files directly as manual pages without PDF conversion."""
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
-            "Selecionar Imagens do Manual",
+            "Select Manual Images",
             "",
-            "Imagens (*.png *.jpg *.jpeg *.bmp *.webp)"
+            "Image files (*.png *.jpg *.jpeg *.bmp *.webp *.avif *.tif *.tiff *.gif *.ico *.svg);;All files (*.*)"
         )
         if not file_paths:
             return
@@ -653,7 +700,7 @@ class MainWindow(QMainWindow):
             
             try:
                 if Image is None:
-                    raise ImportError("Pillow (PIL) não está instalado no ambiente Python.")
+                    raise ImportError("Pillow (PIL) is not installed in the Python environment.")
                 img = Image.open(src_path)
                 if img.mode in ("RGBA", "P"):
                     img = img.convert("RGB")
@@ -668,16 +715,16 @@ class MainWindow(QMainWindow):
                     image_path=dest_image_path,
                     thumbnail_path=dest_thumb_path,
                     variant=variant,
-                    extracted_text=f"Imagem direta {src_path.stem}",
+                    extracted_text=f"Direct image {src_path.stem}",
                     source_type="image",
                 )
                 pages.append(pdf_page)
             except Exception as e:
-                QMessageBox.warning(self, "Erro ao carregar imagem", f"Não foi possível processar {src_path.name}:\n{e}")
+                QMessageBox.warning(self, "Image loading error", f"Could not process {src_path.name}:\n{e}")
                 
         if pages:
             self._rendering_completed(pages)
-            self.statusBar().showMessage(f"Carregadas {len(pages)} imagens diretamente com sucesso.")
+            self.statusBar().showMessage(f"Successfully loaded {len(pages)} images directly.")
 
     def _update_render_progress(self, current: int, total: int) -> None:
         if total > 0:
@@ -699,10 +746,10 @@ class MainWindow(QMainWindow):
         html_pages = sum(1 for page in pages if page.source_type == "html")
         if html_pages:
             self.statusBar().showMessage(
-                f"HTML importado com {len(pages)} página(s) visuais e texto-fonte extraído para a IA."
+                f"HTML imported with {len(pages)} visual page(s) and source text extracted for AI analysis."
             )
         else:
-            self.statusBar().showMessage(f"Carregadas {len(pages)} página(s) do manual.")
+            self.statusBar().showMessage(f"Loaded {len(pages)} manual page(s).")
 
         if any(page.source_type == "pdf" and page.variant == 1 for page in pages):
             self._start_pdf_structure_analysis()
@@ -729,7 +776,7 @@ class MainWindow(QMainWindow):
         self._pdf_structure_worker.failed.connect(self._pdf_structure_failed)
         self._pdf_structure_worker.start()
         self.statusBar().showMessage(
-            "A IA está selecionando somente o conteúdo essencial do PDF para o manual E2PS…"
+            "AI is selecting only the essential PDF content for the E2PS manual…"
         )
 
     def _pdf_structure_completed(self, plan: PdfStructurePlan) -> None:
@@ -739,9 +786,9 @@ class MainWindow(QMainWindow):
         if not plan.sections:
             self._last_pdf_structure_plan = plan
             self.ai_suggest_button.setEnabled(True)
-            message = plan.note or "Não foi possível identificar conteúdo técnico suficiente no PDF."
+            message = plan.note or "Could not identify enough technical content in the PDF."
             self.chat_display.append(
-                "<br><b>🤖 Análise automática do PDF:</b><br>" + escape(message)
+                "<br><b>🤖 Automatic PDF analysis:</b><br>" + escape(message)
             )
             self.statusBar().showMessage(message, 9000)
             return
@@ -760,23 +807,23 @@ class MainWindow(QMainWindow):
 
         selected_count = len(plan.selected_page_numbers)
         omitted_count = len(plan.omitted_page_numbers)
-        mode = "IA" if plan.used_ai else "análise local"
+        mode = "AI" if plan.used_ai else "local analysis"
         if plan.detected_chapter_ranges:
             summary = (
-                f"Foram criadas {created_sections} seção(ões) editáveis por cobertura contínua, com "
-                f"{selected_count} página(s) técnicas agrupadas pelos capítulos e subtítulos do PDF. "
-                f"{omitted_count} página(s) fora do escopo operacional foram deixadas de fora."
+                f"Created {created_sections} editable section(s) using continuous coverage, with "
+                f"{selected_count} technical page(s) grouped by the PDF chapters and subtitles. "
+                f"{omitted_count} page(s) outside the operational scope were left out."
             )
         else:
             summary = (
-                f"Foram criadas {created_sections} seção(ões) editáveis com {selected_count} página(s) "
-                f"técnicas selecionadas pela {mode}. {omitted_count} página(s) de capa, referência, "
-                "marketing, duplicidade ou conteúdo não operacional foram deixadas de fora."
+                f"Created {created_sections} editable section(s) with {selected_count} technical page(s) "
+                f"selected by {mode}. {omitted_count} cover, reference, "
+                "marketing, duplicate, or non-operational pages were left out."
             )
         if plan.note:
             summary += " " + plan.note
         self.chat_display.append(
-            "<br><b>🤖 Estrutura enxuta do PDF criada:</b><br>"
+            "<br><b>🤖 Focused PDF structure created:</b><br>"
             + escape(summary)
             + self._format_pdf_plan_evidence(plan)
         )
@@ -787,12 +834,12 @@ class MainWindow(QMainWindow):
         if self._pdf_structure_generation != self._project_generation:
             return
         message = (
-            "As páginas foram carregadas, mas a estrutura automática do PDF não pôde ser criada: "
+            "The pages were loaded, but the automatic PDF structure could not be created: "
             f"{error}"
         )
         self.ai_suggest_button.setEnabled(bool(self._pages))
         self.chat_display.append(
-            "<br><b>🤖 Análise automática do PDF:</b><br>" + escape(message)
+            "<br><b>🤖 Automatic PDF analysis:</b><br>" + escape(message)
         )
         self.statusBar().showMessage(message, 10000)
 
@@ -803,36 +850,36 @@ class MainWindow(QMainWindow):
             section_pages = ", ".join(str(number) for number in section.page_numbers)
             label = f"<b>{escape(section.title)}</b>"
             if section_pages:
-                label += f" — páginas {escape(section_pages)}"
+                label += f" — pages {escape(section_pages)}"
             if section.evidence:
-                label += f"<br><span style='color:#4B5563'>Evidência: “{escape(section.evidence)}”</span>"
+                label += f"<br><span style='color:#4B5563'>Evidence: “{escape(section.evidence)}”</span>"
             lines.append(label)
             for subsection in section.subsections:
                 subsection_pages = ", ".join(str(number) for number in subsection.page_numbers)
                 sub_label = f"&nbsp;&nbsp;• <b>{escape(subsection.title)}</b>"
                 if subsection_pages:
-                    sub_label += f" — páginas {escape(subsection_pages)}"
+                    sub_label += f" — pages {escape(subsection_pages)}"
                 if subsection.evidence:
                     sub_label += (
                         f"<br>&nbsp;&nbsp;&nbsp;&nbsp;<span style='color:#4B5563'>"
-                        f"Evidência: “{escape(subsection.evidence)}”</span>"
+                        f"Evidence: “{escape(subsection.evidence)}”</span>"
                     )
                 lines.append(sub_label)
         if plan.detected_chapter_ranges:
             ranges = "; ".join(
-                f"{escape(title)}: páginas {escape(', '.join(str(number) for number in numbers))}"
+                f"{escape(title)}: pages {escape(', '.join(str(number) for number in numbers))}"
                 for title, numbers in plan.detected_chapter_ranges.items()
             )
             lines.append(
-                "<span style='color:#1D4ED8'><b>Cobertura contínua detectada:</b> "
+                "<span style='color:#1D4ED8'><b>Continuous coverage detected:</b> "
                 f"{ranges}</span>"
             )
         if plan.coverage_warnings:
             lines.extend(
-                f"<span style='color:#B45309'>Atenção: {escape(warning)}</span>"
+                f"<span style='color:#B45309'>Warning: {escape(warning)}</span>"
                 for warning in plan.coverage_warnings
             )
-        return "<br><br><b>Seleção verificável no PDF:</b><br>" + "<br>".join(lines) if lines else ""
+        return "<br><br><b>Verifiable PDF selection:</b><br>" + "<br>".join(lines) if lines else ""
 
     def _build_sections_from_pdf_plan(self, plan: PdfStructurePlan) -> int:
         """Map an AI-selected PDF plan to editable mixed content blocks.
@@ -922,16 +969,16 @@ class MainWindow(QMainWindow):
         self._refresh_sections()
         self.export_button.setEnabled(bool(self._sections))
 
-        summary = f"Foram criadas {created_sections} seção(ões) editáveis a partir da estrutura do HTML."
+        summary = f"Created {created_sections} editable section(s) from the HTML structure."
         if plan.image_count:
             summary += (
-                f" Foram identificadas {plan.image_count} imagem(ns) que precisam ser revisadas "
-                "na pré-visualização e, se necessárias no manual, incluídas como recortes ou capturas."
+                f" Identified {plan.image_count} image(s) that need to be reviewed "
+                "in the preview and, if needed in the manual, included as crops or screenshots."
             )
         else:
-            summary += " Nenhuma imagem que exija captura foi identificada na estrutura semântica."
+            summary += " No image requiring a capture was identified in the semantic structure."
         self.chat_display.append(
-            "<br><b>🤖 Estrutura HTML criada automaticamente:</b><br>"
+            "<br><b>🤖 HTML structure created automatically:</b><br>"
             f"{escape(summary)}"
         )
         self.statusBar().showMessage(summary, 9000)
@@ -969,18 +1016,18 @@ class MainWindow(QMainWindow):
         """Return only the section/subsection locations that contain image-capture notices."""
         pending: list[str] = []
         for section in self._sections:
-            section_location = f"Seção \"{section.title}\""
+            section_location = f"Section \"{section.title}\""
             if any(
-                isinstance(content, str) and content.startswith("Imagem encontrada:")
+                isinstance(content, str) and content.startswith("Image found:")
                 for content in section.content
             ):
                 pending.append(section_location)
             for subsection in section.subsections:
                 if any(
-                    isinstance(content, str) and content.startswith("Imagem encontrada:")
+                    isinstance(content, str) and content.startswith("Image found:")
                     for content in subsection.content
                 ):
-                    pending.append(f"{section_location} › Subseção \"{subsection.title}\"")
+                    pending.append(f"{section_location} › Subsection \"{subsection.title}\"")
         return list(dict.fromkeys(pending))
 
     def _show_pending_image_review(self, show_dialog: bool = False) -> None:
@@ -988,49 +1035,49 @@ class MainWindow(QMainWindow):
         pending = self._pending_image_locations()
         if not pending:
             message = (
-                "Nenhuma imagem pendente de captura foi encontrada nas seções atuais.\n\n"
-                "Se você ainda precisar incluir uma figura, crie um recorte da pré-visualização "
-                "ou importe uma imagem e adicione-a à seção desejada."
+                "No pending image captures were found in the current sections.\n\n"
+                "If you still need to include a figure, create a crop from the preview "
+                "or import an image and add it to the desired section."
             )
             self.chat_display.append(
-                "<br><b>🤖 Revisão de imagens pendentes:</b><br>"
+                "<br><b>🤖 Pending image review:</b><br>"
                 f"{escape(message).replace(chr(10), '<br>')}"
             )
-            self.statusBar().showMessage("Nenhuma imagem pendente de captura.", 5000)
+            self.statusBar().showMessage("No pending image captures.", 5000)
         else:
             location_lines = "\n".join(f"• {location}" for location in pending)
             message = (
-                "Há imagens pendentes nas seguintes partes do manual:\n\n"
+                "Pending images were found in the following parts of the manual:\n\n"
                 f"{location_lines}\n\n"
-                "Abra a pré-visualização, crie um recorte ou importe uma imagem. Em seguida, "
-                "use Editar conteúdo na seção indicada para posicioná-la no manual."
+                "Open the preview, create a crop, or import an image. Then "
+                "use Edit Selected Content in the indicated section to place it in the manual."
             )
             items = "".join(f"<li>{escape(location)}</li>" for location in pending)
             self.chat_display.append(
-                "<br><b>🤖 Revisão de imagens pendentes:</b><br>"
-                "Há imagens pendentes nas partes abaixo. Abra a pré-visualização, crie um recorte "
-                "ou importe uma imagem e, depois, use Editar conteúdo para adicioná-la à parte indicada."
+                "<br><b>🤖 Pending image review:</b><br>"
+                "Pending images were found in the parts below. Open the preview, create a crop, "
+                "or import an image, then use Edit Selected Content to add it to the indicated part."
                 f"<ol>{items}</ol>"
             )
             self.statusBar().showMessage(
-                f"Há imagens pendentes em {len(pending)} seção(ões). Veja a revisão.",
+                f"Pending images found in {len(pending)} section(s). See the review.",
                 9000,
             )
 
         if show_dialog:
-            QMessageBox.information(self, "Revisar imagens pendentes", message)
+            QMessageBox.information(self, "Review Pending Images", message)
 
     def _rendering_failed(self, error: str) -> None:
         if self._render_generation != self._project_generation and self._html_render_generation != self._project_generation:
             return
         self.progress.setVisible(False)
-        self.preview.setText("Não foi possível renderizar este arquivo")
+        self.preview.setText("Could not render this file")
         QMessageBox.critical(
             self,
-            "Erro ao abrir manual",
-            f"O arquivo não pôde ser convertido em páginas.\n\n{error}",
+            "Manual opening error",
+            f"The file could not be converted into pages.\n\n{error}",
         )
-        self.statusBar().showMessage("Falha ao renderizar o manual")
+        self.statusBar().showMessage("Manual rendering failed")
 
     def _show_current_page(self, item: QListWidgetItem | None) -> None:
         if item is None:
@@ -1041,13 +1088,13 @@ class MainWindow(QMainWindow):
             self.export_mode_combo.setEnabled(False)
             return
         
-        # Atualizar combo de modo de exportação para a página selecionada
+        # Update the export mode combo for the selected page
         self.export_mode_combo.setEnabled(True)
         mode_idx = self.export_mode_combo.findData(getattr(page, "export_mode", "image"))
         self.export_mode_combo.setCurrentIndex(mode_idx)
 
         pixmap = QPixmap(str(page.image_path))
-        # Exibir com resolução otimizada (500px de largura) para caber 100% dentro da aba de visualização
+        # Display at an optimized resolution (500px wide) to fit fully in the preview tab
         scaled_pixmap = pixmap.scaledToWidth(500, Qt.TransformationMode.SmoothTransformation)
         self.preview.setPixmap(scaled_pixmap)
         self.preview.resize(scaled_pixmap.size())
@@ -1062,17 +1109,17 @@ class MainWindow(QMainWindow):
             return
         
         new_mode = self.export_mode_combo.itemData(index)
-        # Como PdfPage é frozen, precisamos criar uma nova instância com o modo atualizado
+        # PdfPage is frozen, so create a new instance with the updated mode
         from dataclasses import replace
         new_page = replace(page, export_mode=new_mode)
         
-        # Atualizar na lista interna _pages
+        # Update the internal _pages list
         for i, p in enumerate(self._pages):
             if p.number == page.number and p.variant == page.variant:
                 self._pages[i] = new_page
                 break
         
-        # Atualizar as referências já inseridas nas seções, inclusive as criadas automaticamente.
+        # Update references already inserted into sections, including automatically created ones.
         for section in self._sections:
             section.content = [
                 new_page if isinstance(content, PdfPage) and content.number == page.number
@@ -1086,9 +1133,9 @@ class MainWindow(QMainWindow):
                     for content in subsection.content
                 ]
 
-        # Atualizar o item da lista
+        # Update the list item
         item.setData(Qt.ItemDataRole.UserRole, new_page)
-        self.statusBar().showMessage(f"Página {page.number} configurada para exportação como {new_mode}.")
+        self.statusBar().showMessage(f"Page {page.number} configured for {new_mode} export.")
 
     def _automatic_plan_coverage_warnings(self) -> list[str]:
         """Compare the current editable manual with the ranges recognized from the PDF source."""
@@ -1114,7 +1161,7 @@ class MainWindow(QMainWindow):
         ]
         if missing_sections:
             warnings.append(
-                "Capítulos detectados na fonte não estão mais na estrutura atual: "
+                "Source chapters are no longer in the current structure: "
                 + ", ".join(missing_sections) + "."
             )
 
@@ -1125,7 +1172,7 @@ class MainWindow(QMainWindow):
             formatted = ", ".join(str(number) for number in sorted(set(missing_pages))[:18])
             suffix = "…" if len(set(missing_pages)) > 18 else ""
             warnings.append(
-                "Páginas técnicas reconhecidas ainda não foram associadas a uma seção: "
+                "Recognized technical pages are not assigned to a section yet: "
                 f"{formatted}{suffix}."
             )
         return list(dict.fromkeys(warnings))
@@ -1138,11 +1185,11 @@ class MainWindow(QMainWindow):
         detail = "\n\n".join(f"• {warning}" for warning in warnings)
         answer = QMessageBox.warning(
             self,
-            "Revisão de cobertura necessária",
-            "A análise do PDF identificou uma possível lacuna no manual que será exportado:\n\n"
+            "Coverage review required",
+            "PDF analysis identified a possible gap in the manual to be exported:\n\n"
             f"{detail}\n\n"
-            "Escolha 'Sim' somente se esta for uma exclusão intencional. Escolha 'Não' para "
-            "revisar a árvore de seções e as páginas associadas.",
+            "Choose 'Yes' only if this exclusion is intentional. Choose 'No' to "
+            "review the section tree and its assigned pages.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -1158,7 +1205,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Sections required", "Create at least one section before exporting.")
             return
         if not self._confirm_export_coverage():
-            self.statusBar().showMessage("Exportação cancelada para revisão da cobertura técnica.", 7000)
+            self.statusBar().showMessage("Export cancelled for technical coverage review.", 7000)
             return
 
         source_language = self.source_language.currentData()
@@ -1187,13 +1234,13 @@ class MainWindow(QMainWindow):
         self._export_worker.progress_changed.connect(self._update_export_progress)
         self._export_worker.completed.connect(self._export_finished)
         self._export_worker.failed.connect(self._export_failed)
-        # Progresso percentual: evita a impressão de carregamento infinito.
+        # Percentage progress avoids the appearance of an endless loading state.
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self.export_button.setEnabled(False)
         self._export_worker.start()
-        self.statusBar().showMessage("Exportando projeto e analisando páginas com IA…")
+        self.statusBar().showMessage("Exporting project and analyzing pages with AI…")
 
     def add_section(self) -> None:
         """Create a named section from currently checked page items."""
@@ -1209,7 +1256,7 @@ class MainWindow(QMainWindow):
         self.deselect_all_pages()
         self._refresh_sections()
         self.export_button.setEnabled(True)
-        self.statusBar().showMessage(f"Section '{title}' created with {len(pages)} pages")
+        self.statusBar().showMessage(f"Section '{title}' created with {len(pages)} pages.")
 
     def remove_selected_section(self) -> None:
         """Remove the selected section without deleting rendered pages."""
@@ -1337,15 +1384,15 @@ class MainWindow(QMainWindow):
         self.section_tree.setCurrentItem(item)
 
         menu = QMenu(self)
-        edit_content_action = menu.addAction("Editar conteúdo…")
-        rename_action = menu.addAction("Renomear título…")
-        delete_action = menu.addAction("Excluir seção" if item_type == "section" else "Excluir subseção")
+        edit_content_action = menu.addAction("Edit content…")
+        rename_action = menu.addAction("Rename title…")
+        delete_action = menu.addAction("Delete section" if item_type == "section" else "Delete subsection")
         menu.addSeparator()
         move_up_action = menu.addAction(
-            "Mover seção para cima" if item_type == "section" else "Mover subseção para cima"
+            "Move section up" if item_type == "section" else "Move subsection up"
         )
         move_down_action = menu.addAction(
-            "Mover seção para baixo" if item_type == "section" else "Mover subseção para baixo"
+            "Move section down" if item_type == "section" else "Move subsection down"
         )
 
         if item_type == "section":
@@ -1390,7 +1437,7 @@ class MainWindow(QMainWindow):
             self.section_tree.setCurrentItem(
                 self.section_tree.topLevelItem(destination_index)
             )
-            self.statusBar().showMessage("Ordem da seção atualizada.", 4000)
+            self.statusBar().showMessage("Section order updated.", 4000)
             return
 
         siblings = self._sections[section_index].subsections
@@ -1404,7 +1451,7 @@ class MainWindow(QMainWindow):
         self._refresh_sections()
         parent = self.section_tree.topLevelItem(section_index)
         self.section_tree.setCurrentItem(parent.child(destination_index))
-        self.statusBar().showMessage("Ordem da subseção atualizada.", 4000)
+        self.statusBar().showMessage("Subsection order updated.", 4000)
 
     def _section_selection_changed(
         self,
@@ -1450,7 +1497,7 @@ class MainWindow(QMainWindow):
         else:
             parent = self.section_tree.topLevelItem(section_index)
             self.section_tree.setCurrentItem(parent.child(subsection_index))
-        self.statusBar().showMessage("Conteúdo da seção atualizado.", 5000)
+        self.statusBar().showMessage("Section content updated.", 5000)
 
     def rename_selected_item(self) -> None:
         """Rename selected section or subsection using dialog."""
@@ -1468,12 +1515,12 @@ class MainWindow(QMainWindow):
         )
         from PySide6.QtWidgets import QInputDialog
         new_title, ok = QInputDialog.getText(
-            self, "Editar Título", "Novo título:", text=target_obj.title
+            self, "Edit Title", "New title:", text=target_obj.title
         )
         if ok and new_title.strip():
             target_obj.title = new_title.strip()
             self._refresh_sections()
-            self.statusBar().showMessage(f"Título atualizado para '{new_title.strip()}'")
+            self.statusBar().showMessage(f"Title updated to '{new_title.strip()}'")
 
     def add_subsection(self) -> None:
         """Create a subsection under the selected section from checked pages."""
@@ -1505,7 +1552,7 @@ class MainWindow(QMainWindow):
             return
         text = self.content_text_input.toPlainText().strip()
         if not text:
-            QMessageBox.warning(self, "Texto vazio", "Escreva algum texto antes de adicionar.")
+            QMessageBox.warning(self, "Empty text", "Write some text before adding it.")
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
         if not data:
@@ -1517,7 +1564,7 @@ class MainWindow(QMainWindow):
             self._sections[section_index].subsections[subsection_index].content.append(text)
         self.content_text_input.clear()
         self._refresh_sections()
-        self.statusBar().showMessage("Bloco de texto inserido na seção com sucesso.")
+        self.statusBar().showMessage("Text block added to the section successfully.")
 
     def ai_suggest_structure(self) -> None:
         """Show the latest evidence-based PDF selection instead of requesting a generic outline."""
@@ -1528,36 +1575,36 @@ class MainWindow(QMainWindow):
         if plan is None:
             QMessageBox.information(
                 self,
-                "Análise em andamento",
-                "A análise do PDF ainda está sendo concluída. Aguarde a seleção baseada nas páginas reais.",
+                "Analysis in progress",
+                "PDF analysis is still in progress. Wait for the selection based on the actual pages.",
             )
             return
         if not plan.sections:
-            message = plan.note or "Não foi possível selecionar conteúdo técnico suficiente no PDF."
-            QMessageBox.information(self, "Seleção do PDF", message)
+            message = plan.note or "It was not possible to select enough technical content from the PDF."
+            QMessageBox.information(self, "PDF Selection", message)
             return
         text = (
-            "<br><b>🤖 [Seleção fundamentada do PDF]:</b><br>"
-            "Esta lista usa somente páginas e trechos encontrados no PDF carregado."
+            "<br><b>🤖 [Evidence-based PDF selection]:</b><br>"
+            "This list uses only pages and excerpts found in the loaded PDF."
             + self._format_pdf_plan_evidence(plan)
             + "<br>"
         )
         self.chat_display.append(text)
-        self.statusBar().showMessage("Seleção fundamentada do PDF exibida no painel de IA.")
+        self.statusBar().showMessage("Evidence-based PDF selection displayed in the AI panel.")
 
     def _test_ai_connection(self) -> None:
         """Test API connection with current settings."""
         success, message = self._ai_service.test_connection()
         if success:
-            QMessageBox.information(self, "Sucesso", message)
+            QMessageBox.information(self, "Success", message)
         else:
-            QMessageBox.warning(self, "Falha na Conexão", message)
+            QMessageBox.warning(self, "Connection Failed", message)
 
     def ai_generate_section_text(self) -> None:
         """Generate professional technical text using AI and insert it as a content block."""
         item = self.section_tree.currentItem()
         if item is None:
-            QMessageBox.warning(self, "Selecione uma seção", "Selecione uma seção ou subseção na árvore primeiro.")
+            QMessageBox.warning(self, "Select a Section", "Select a section or subsection in the tree first.")
             return
         data = item.data(0, Qt.ItemDataRole.UserRole)
         if not data:
@@ -1565,27 +1612,27 @@ class MainWindow(QMainWindow):
         item_type, section_index, subsection_index = data
         sec_title = self._sections[section_index].title if item_type == "section" else self._sections[section_index].subsections[subsection_index].title
         
-        self.statusBar().showMessage("Gerando texto técnico com Manus AI...")
+        self.statusBar().showMessage("Generating technical text with Manus AI...")
         generated = self._ai_service.generate_section_text(sec_title, self.title_input.text())
         self.content_text_input.setPlainText(generated)
-        self.statusBar().showMessage("Texto técnico gerado com sucesso!")
+        self.statusBar().showMessage("Technical text generated successfully!")
 
     def send_chat_message(self) -> None:
         """Send user message to AI chat assistant with real PDF text context."""
         msg = self.chat_input.text().strip()
         if not msg:
             return
-        self.chat_display.append(f"<br><b>Você:</b> {msg}")
+        self.chat_display.append(f"<br><b>You:</b> {msg}")
         self.chat_input.clear()
         
         if self._pages:
             snippets = []
             for p in self._pages:
                 snippet = p.extracted_text[:250].replace("\n", " ")
-                snippets.append(f"Página {p.number}: {snippet}")
+                snippets.append(f"Page {p.number}: {snippet}")
             pdf_context = "\n".join(snippets)
         else:
-            pdf_context = "Nenhum PDF aberto no momento."
+            pdf_context = "No PDF is currently open."
             
         reply = self._ai_service.ask_ai(msg, pdf_context)
         self.chat_display.append(f"<br><b>🤖 Manus AI:</b> {reply}")
@@ -1605,8 +1652,8 @@ class MainWindow(QMainWindow):
         model = self.model_input.text().strip()
         self._ai_service.update_key(key, base_url, model)
         self._persist_ai_settings()
-        QMessageBox.information(self, "Configurações Salvas", f"Configurações salvas neste computador!\nModelo: {model or 'llama-3.3-70b-versatile'}\nBase URL: {base_url or 'OpenAI Default'}")
-        self.statusBar().showMessage("Configurações de IA atualizadas.")
+        QMessageBox.information(self, "Settings Saved", f"Settings saved on this computer.\nModel: {model or 'llama-3.3-70b-versatile'}\nBase URL: {base_url or 'OpenAI Default'}")
+        self.statusBar().showMessage("AI settings updated.")
 
     def closeEvent(self, event) -> None:
         """Keep the current AI configuration available on this computer after restart."""
@@ -1617,9 +1664,9 @@ class MainWindow(QMainWindow):
         """Select any file, validate its image content and normalize it to PNG."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Selecionar imagem da capa",
+            "Select Cover Image",
             "",
-            "Todos os arquivos (*.*)",
+            "All files (*.*)",
         )
         if not file_path:
             return
@@ -1631,18 +1678,18 @@ class MainWindow(QMainWindow):
         except Exception as error:
             QMessageBox.warning(
                 self,
-                "Imagem de capa inválida",
-                f"Não foi possível abrir o arquivo como imagem:\n{error}",
+                "Invalid cover image",
+                f"The selected file could not be opened as an image:\n{error}",
             )
             return
 
         self._cover_image_path = normalized_path
         self.cover_path_input.setText(f"{source.name}  →  PNG")
         self.cover_path_input.setToolTip(
-            f"Arquivo original: {source}\nImagem normalizada: {normalized_path}"
+            f"Original file: {source}\nNormalized image: {normalized_path}"
         )
         self.statusBar().showMessage(
-            f"Capa convertida para PNG: {source.name}",
+            f"Cover converted to PNG: {source.name}",
             6000,
         )
 
@@ -1670,7 +1717,7 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, 100)
             self.progress.setValue(percent)
             self.statusBar().showMessage(
-                f"Exportando páginas: {current} de {total} ({percent}%)…"
+                f"Exporting pages: {current} of {total} ({percent}%)…"
             )
 
     def _export_finished(self, project_dir: Path) -> None:

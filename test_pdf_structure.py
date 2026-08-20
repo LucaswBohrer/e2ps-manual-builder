@@ -411,7 +411,7 @@ def test_window_reports_missing_pages_from_detected_chapter_coverage() -> None:
         window._last_pdf_structure_plan = plan
         window._build_sections_from_pdf_plan(plan)
         warnings = window._automatic_plan_coverage_warnings()
-        assert any("páginas técnicas reconhecidas" in warning.lower() for warning in warnings)
+        assert any("recognized technical pages" in warning.lower() for warning in warnings)
         assert any("3" in warning for warning in warnings)
     finally:
         window.close()
@@ -548,10 +548,10 @@ def test_ai_suggestion_shows_only_the_saved_evidence_based_pdf_selection() -> No
         window._last_pdf_structure_plan = plan
         window.ai_suggest_structure()
         rendered_text = window.chat_display.toPlainText()
-        assert "Seleção fundamentada do PDF" in rendered_text
-        assert "páginas 2" in rendered_text
+        assert "Verifiable PDF selection" in rendered_text
+        assert "pages 2" in rendered_text
         assert "disconnect the equipment before maintenance" in rendered_text
-        assert "Sugestão de Estrutura da IA" not in rendered_text
+        assert "AI Structure Suggestion" not in rendered_text
     finally:
         window.close()
         app.processEvents()

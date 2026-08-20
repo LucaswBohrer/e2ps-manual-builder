@@ -100,9 +100,9 @@ class PdfStructureWorker(QThread):
         for page in candidates:
             visual_text = vision_service.extract_page_outline_text(page.image_path)
             if len(visual_text.strip()) >= 20:
-                # A transcrição visual é somente uma evidência para a sugestão de estrutura.
-                # Nunca sobrescreva ``extracted_text``: ele é o único texto que pode seguir
-                # automaticamente para o R Markdown final.
+                # Visual transcription is evidence only for the structure suggestion.
+                # Never overwrite ``extracted_text``: it is the only text that may continue
+                # automatically into the final R Markdown.
                 replacement = replace(page, visual_outline_text=visual_text.strip())
                 page_index = self._pages.index(page)
                 self._pages[page_index] = replacement
@@ -117,8 +117,8 @@ class PdfStructureWorker(QThread):
             plan: PdfStructurePlan = service.create_pdf_structure(
                 self._pages, self._manual_title
             )
-            # Preserva exclusivamente o texto selecionável original para a montagem do
-            # manual. Leitura visual de apoio permanece em ``visual_outline_text``.
+            # Preserve only the original selectable text for building the
+            # manual. Supporting visual reading remains in ``visual_outline_text``.
             plan.extracted_text_by_page = {
                 page.number: page.extracted_text
                 for page in self._pages
@@ -126,9 +126,9 @@ class PdfStructureWorker(QThread):
             }
             if recovered_pages:
                 prefix = (
-                    f"Leitura visual aplicada a {recovered_pages} página(s) sem texto extraível. "
+                    f"Visual reading applied to {recovered_pages} page(s) without extractable text. "
                 )
-                plan.note = prefix + (plan.note or "Estrutura criada a partir do conteúdo visível.")
+                plan.note = prefix + (plan.note or "Structure created from the visible content.")
             self.completed.emit(plan)
         except Exception as error:
             self.failed.emit(str(error))

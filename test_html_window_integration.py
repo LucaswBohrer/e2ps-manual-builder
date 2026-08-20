@@ -54,16 +54,16 @@ def main() -> None:
             block for block in window._sections[1].content if isinstance(block, str)
         ]
         assert any(
-            "Imagem encontrada: Contactor connection diagram" in block
+            "Image found: Contactor connection diagram" in block
             for block in image_hints
         ), "O aviso de captura da imagem não foi inserido na seção editável."
-        assert any("imagem incorporada no HTML" in block for block in image_hints)
+        assert any("embedded HTML image" in block for block in image_hints)
         assert all("base64" not in block.lower() for block in image_hints)
         assert window.section_tree.topLevelItemCount() == 2
         assert window.export_button.isEnabled(), "A exportação não foi habilitada após criar seções HTML."
-        assert "2 seção(ões) editáveis" in window.chat_display.toPlainText()
-        assert "Seção \"Safety\"" in window.chat_display.toPlainText()
-        assert window._pending_image_locations() == ['Seção "Safety"']
+        assert "2 editable section(s)" in window.chat_display.toPlainText()
+        assert "Section \"Safety\"" in window.chat_display.toPlainText()
+        assert window._pending_image_locations() == ['Section \"Safety\"']
         assert window.image_review_button.isEnabled()
         assert window.section_tree.contextMenuPolicy() == Qt.ContextMenuPolicy.CustomContextMenu
 

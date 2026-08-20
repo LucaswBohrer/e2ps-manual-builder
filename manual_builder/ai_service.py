@@ -92,25 +92,25 @@ class ManualAIService:
     def test_connection(self) -> tuple[bool, str]:
         """Test API connection with a minimal request."""
         if self._client is None:
-            return False, "Cliente IA não inicializado (Verifique se preencheu a API Key)."
+            return False, "AI client is not initialized. Check that the API key is configured."
         try:
             response = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": "ping"}],
                 max_tokens=5,
             )
-            return True, f"Conexão bem-sucedida com o modelo '{self._model}'!"
+            return True, f"Connection successful with model '{self._model}'."
         except Exception as error:
-            return False, f"Falha na conexão: {error}"
+            return False, f"Connection failed: {error}"
 
     def ask_ai(self, user_message: str, pages_summary: str = "") -> str:
         """Chat with the AI assistant, incorporating concise page text context."""
         if self._client is None:
             return (
-                f"[Modo Auxiliar Inteligente (Sem Chave API configurada ou cliente inativo)]\n"
-                f"Sua pergunta: '{user_message}'.\n"
-                f"Resumo do PDF: {pages_summary}\n"
-                f"Dica: Configure sua API Key e URL base (ex: Groq) no painel superior para interagir com a IA real."
+                f"[Smart Assistant Mode (no API key configured or inactive client)]\n"
+                f"Your question: '{user_message}'.\n"
+                f"PDF summary: {pages_summary}\n"
+                f"Tip: Configure your API key and base URL (for example, Groq) in the top panel to use the live AI service."
             )
 
         # Keep chat history bounded (system prompt + last 6 messages max) to avoid TPM limits
@@ -135,24 +135,24 @@ class ManualAIService:
             self._chat_history.append({"role": "assistant", "content": reply})
             return reply
         except Exception as error:
-            return f"Erro ao comunicar com a IA ({self._model} @ {self._client.base_url if hasattr(self._client, 'base_url') else 'API'}): {error}"
+            return f"AI communication error ({self._model} @ {self._client.base_url if hasattr(self._client, 'base_url') else 'API'}): {error}"
 
     def suggest_structure_text(self, pages: list[PdfPage], manual_title: str) -> str:
         """Return an auditable selection summary instead of an ungrounded free-form outline."""
         plan = self.create_pdf_structure(pages, manual_title)
         if not plan.sections:
-            return plan.note or "Não foi possível encontrar conteúdo técnico suficiente no PDF."
+            return plan.note or "Could not find enough technical content in the PDF."
         lines = [plan.note] if plan.note else []
         for section in plan.sections:
             page_list = ", ".join(str(number) for number in section.page_numbers)
-            evidence = f" Evidência: “{section.evidence}”." if section.evidence else ""
-            lines.append(f"{section.title} — páginas {page_list}.{evidence}")
+            evidence = f" Evidence: “{section.evidence}”." if section.evidence else ""
+            lines.append(f"{section.title} — pages {page_list}.{evidence}")
             for subsection in section.subsections:
                 sub_pages = ", ".join(str(number) for number in subsection.page_numbers)
                 sub_evidence = (
-                    f" Evidência: “{subsection.evidence}”." if subsection.evidence else ""
+                    f" Evidence: “{subsection.evidence}”." if subsection.evidence else ""
                 )
-                lines.append(f"  - {subsection.title} — páginas {sub_pages}.{sub_evidence}")
+                lines.append(f"  - {subsection.title} — pages {sub_pages}.{sub_evidence}")
         return "\n".join(lines)
 
     _SOURCE_CHAPTERS: tuple[tuple[int, str, tuple[str, ...]], ...] = (

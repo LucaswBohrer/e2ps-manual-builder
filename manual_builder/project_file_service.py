@@ -81,7 +81,7 @@ class ProjectFileService:
                 thumbnail_asset = f"assets/thumbnails/{page_id}.png"
                 if not page.image_path.is_file() or not page.thumbnail_path.is_file():
                     raise FileNotFoundError(
-                        f"Os arquivos da {page.display_name} não estão disponíveis para salvar o projeto."
+                        f"The files for {page.display_name} are not available to save the project."
                     )
                 archive.write(page.image_path, image_asset)
                 archive.write(page.thumbnail_path, thumbnail_asset)
@@ -122,7 +122,7 @@ class ProjectFileService:
         """Extract a manifest-declared asset without using zipfile.extract()."""
         safe_relative = Path(asset_name)
         if safe_relative.is_absolute() or ".." in safe_relative.parts:
-            raise ValueError("O arquivo .e2ps contém um caminho de recurso inválido.")
+            raise ValueError("The .e2ps file contains an invalid asset path.")
         destination = destination_root / safe_relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(archive.read(asset_name))
@@ -146,7 +146,7 @@ class ProjectFileService:
         """Restore a .e2ps archive into an isolated working directory."""
         source = Path(source)
         if source.suffix.lower() not in {".e2ps", ".emb"}:
-            raise ValueError("Selecione um arquivo de projeto E2PS Manual Builder (.e2ps).")
+            raise ValueError("Select an E2PS Manual Builder project file (.e2ps).")
         working_root = Path(asset_root)
         working_root.mkdir(parents=True, exist_ok=True)
 
@@ -155,12 +155,12 @@ class ProjectFileService:
                 try:
                     manifest = json.loads(archive.read("project.json").decode("utf-8"))
                 except KeyError as error:
-                    raise ValueError("O arquivo .e2ps não possui o arquivo project.json.") from error
+                    raise ValueError("The .e2ps file does not contain project.json.") from error
 
                 if manifest.get("format") != PROJECT_FORMAT:
-                    raise ValueError("Este arquivo não é um projeto do E2PS Manual Builder.")
+                    raise ValueError("This file is not an E2PS Manual Builder project.")
                 if manifest.get("version") != PROJECT_VERSION:
-                    raise ValueError("A versão deste arquivo .e2ps ainda não é compatível.")
+                    raise ValueError("This .e2ps file version is not compatible yet.")
 
                 pages: list[PdfPage] = []
                 pages_by_id: dict[str, PdfPage] = {}
@@ -218,5 +218,5 @@ class ProjectFileService:
                     cover_image_path=cover_image_path,
                 )
         except BadZipFile as error:
-            raise ValueError("O arquivo .e2ps está corrompido ou não é um arquivo válido.") from error
+            raise ValueError("The .e2ps file is corrupted or is not a valid archive.") from error
 ""

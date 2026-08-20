@@ -25,18 +25,18 @@ if not exist "%ISCC%" goto :missing_inno
 if errorlevel 1 goto :error
 
 echo.
-echo Build concluido com sucesso.
-echo Executavel: dist\E2PS Manual Builder\E2PSManualBuilder.exe
-echo Instalador: release\E2PS-Manual-Builder-Setup-1.0.0.exe
+echo V2 build completed successfully.
+echo Executable: dist\E2PS Manual Builder\E2PSManualBuilder.exe
+echo Installer: release\E2PS-Manual-Builder-V2-Setup-2.0.0.exe
 exit /b 0
 
 :missing_inno
 echo.
-echo Inno Setup 6 nao foi localizado.
-echo Instale-o em https://jrsoftware.org/isdl.php e execute este arquivo novamente.
+echo Inno Setup 6 was not found.
+echo Install it from https://jrsoftware.org/isdl.php and run this file again.
 exit /b 2
 
 :error
 echo.
-echo A geracao da distribuicao falhou. Leia as mensagens acima.
+echo Distribution build failed. Read the messages above.
 exit /b 1

@@ -220,22 +220,22 @@ class CropDialog(QDialog):
 
     def __init__(self, source: QPixmap, parent: object | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Recortar página — zoom")
+        self.setWindowTitle("Crop Page — Zoom")
         self.resize(1050, 820)
 
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "Arraste para selecionar a área que deseja manter. "
-                "Use os controles de zoom ou Ctrl + roda do mouse para ver detalhes. "
-                "Com o botão do meio, arraste para navegar pela página ampliada."
+                "Drag to select the area to keep. "
+                "Use the zoom controls or Ctrl + mouse wheel to inspect details. "
+                "Hold the middle mouse button and drag to navigate the enlarged page."
             )
         )
 
         controls = QHBoxLayout()
         controls.addWidget(QLabel("Zoom:"))
         self._zoom_out_button = QPushButton("−")
-        self._zoom_out_button.setToolTip("Diminuir zoom")
+        self._zoom_out_button.setToolTip("Zoom out")
         self._zoom_out_button.clicked.connect(lambda: self._change_zoom(-25))
         controls.addWidget(self._zoom_out_button)
 
@@ -253,12 +253,12 @@ class CropDialog(QDialog):
         controls.addWidget(self._zoom_value_label)
 
         self._zoom_in_button = QPushButton("+")
-        self._zoom_in_button.setToolTip("Aumentar zoom")
+        self._zoom_in_button.setToolTip("Zoom in")
         self._zoom_in_button.clicked.connect(lambda: self._change_zoom(25))
         controls.addWidget(self._zoom_in_button)
 
-        fit_button = QPushButton("Ajustar página")
-        fit_button.setToolTip("Voltar a mostrar a página inteira")
+        fit_button = QPushButton("Fit Page")
+        fit_button.setToolTip("Show the full page again")
         fit_button.clicked.connect(lambda: self._zoom_slider.setValue(100))
         controls.addWidget(fit_button)
         layout.addLayout(controls)
@@ -282,10 +282,10 @@ class CropDialog(QDialog):
         buttons.rejected.connect(self.reject)
         cancel_button = buttons.button(QDialogButtonBox.StandardButton.Cancel)
         if cancel_button is not None:
-            cancel_button.setText("Cancelar")
+            cancel_button.setText("Cancel")
         apply_button = buttons.button(QDialogButtonBox.StandardButton.Apply)
         if apply_button is not None:
-            apply_button.setText("Aplicar recorte")
+            apply_button.setText("Apply Crop")
             apply_button.clicked.connect(self._apply_crop)
         layout.addWidget(buttons)
 

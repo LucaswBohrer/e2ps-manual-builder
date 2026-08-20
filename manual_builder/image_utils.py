@@ -27,11 +27,11 @@ def _save_svg_as_png(raw: bytes, destination: Path) -> None:
         from PySide6.QtGui import QImage, QPainter
         from PySide6.QtSvg import QSvgRenderer
     except Exception as error:  # pragma: no cover - exercised only on incomplete installs.
-        raise ValueError("O suporte a SVG não está disponível nesta instalação.") from error
+        raise ValueError("SVG support is not available in this installation.") from error
 
     renderer = QSvgRenderer(QByteArray(raw))
     if not renderer.isValid():
-        raise ValueError("O arquivo parece SVG, mas não contém uma imagem SVG válida.")
+        raise ValueError("The file appears to be SVG, but it does not contain a valid SVG image.")
 
     size = renderer.defaultSize()
     if not size.isValid() or size.width() <= 0 or size.height() <= 0:
@@ -44,7 +44,7 @@ def _save_svg_as_png(raw: bytes, destination: Path) -> None:
     finally:
         painter.end()
     if not image.save(str(destination), "PNG"):
-        raise OSError("Não foi possível salvar a capa convertida para PNG.")
+        raise OSError("Could not save the converted cover as PNG.")
 
 
 def convert_image_to_png(source: Path, destination: Path) -> Path:
@@ -57,9 +57,9 @@ def convert_image_to_png(source: Path, destination: Path) -> Path:
     source = Path(source)
     destination = Path(destination)
     if not source.is_file():
-        raise FileNotFoundError(f"A imagem de capa não foi encontrada: {source}")
+        raise FileNotFoundError(f"The cover image was not found: {source}")
     if source.stat().st_size == 0:
-        raise ValueError("O arquivo escolhido para a capa está vazio.")
+        raise ValueError("The selected cover file is empty.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     raw = source.read_bytes()
 
@@ -87,7 +87,7 @@ def convert_image_to_png(source: Path, destination: Path) -> Path:
 
     detail = f" ({pillow_error})" if pillow_error else ""
     raise ValueError(
-        "O arquivo selecionado não contém uma imagem compatível. "
-        "A extensão pode ser qualquer uma, mas o conteúdo precisa ser uma imagem válida "
-        f"(PNG, JPEG, WebP, AVIF, SVG ou outro formato suportado){detail}."
+        "The selected file does not contain a supported image. "
+        "The extension can be anything, but the content must be a valid image "
+        f"(PNG, JPEG, WebP, AVIF, SVG, or another supported format){detail}."
     )

@@ -25,9 +25,9 @@ class HtmlImageHint:
         safe_source = self.source and not self.source.lower().startswith("data:")
         source_note = f" ({self.source})" if safe_source else ""
         return (
-            f"Imagem encontrada: {self.description}{source_note}. "
-            "Abra a pré-visualização HTML, crie um recorte/captura se ela for necessária "
-            "no manual final e insira-o na seção correspondente."
+            f"Image found: {self.description}{source_note}. "
+            "Open the HTML preview and create a crop/screenshot if it is needed "
+            "in the final manual, then insert it into the corresponding section."
         )
 
 
@@ -153,12 +153,12 @@ class _HtmlSemanticExtractor(HTMLParser):
             attributes = {name.lower(): (value or "") for name, value in attrs}
             source = attributes.get("src", "").strip()
             is_embedded_image = source.lower().startswith("data:image/")
-            source_name = "imagem incorporada no HTML" if is_embedded_image else Path(source).name
+            source_name = "embedded HTML image" if is_embedded_image else Path(source).name
             description = (
                 attributes.get("alt", "").strip()
                 or attributes.get("title", "").strip()
                 or source_name
-                or "imagem sem descrição"
+                or "image without description"
             )
             self._events.append(
                 _HtmlEvent(
@@ -258,7 +258,7 @@ class HtmlRenderService:
         image_count = sum(1 for event in events if event.kind == "image")
 
         if not headings:
-            default_section = HtmlOutlineSection(title="Conteúdo importado do HTML")
+            default_section = HtmlOutlineSection(title="HTML imported content")
             for event in events:
                 if event.kind == "text" and event.text:
                     default_section.content.append(event.text)
@@ -284,7 +284,7 @@ class HtmlRenderService:
         def ensure_section() -> HtmlOutlineSection:
             nonlocal current_section
             if current_section is None:
-                current_section = HtmlOutlineSection(title="Conteúdo geral")
+                current_section = HtmlOutlineSection(title="General content")
                 plan.sections.append(current_section)
             return current_section
 
@@ -319,7 +319,7 @@ class HtmlRenderService:
             if section.title.strip() or section.content or section.subsections or section.image_hints
         ]
         if not plan.sections:
-            plan.sections.append(HtmlOutlineSection(title="Conteúdo importado do HTML"))
+            plan.sections.append(HtmlOutlineSection(title="HTML imported content"))
         return plan
 
     @classmethod
@@ -343,12 +343,12 @@ class HtmlRenderService:
         """Create printable PNG pages and thumbnails from a static HTML or HTM file."""
         source = Path(source)
         if source.suffix.lower() not in {".html", ".htm"}:
-            raise ValueError("Selecione um arquivo HTML ou HTM.")
+            raise ValueError("Select an HTML or HTM file.")
 
         html = self._read_html(source)
         extracted_text = self._extract_text(html)
         if not extracted_text and not re.search(r"<(img|table|svg|canvas)\b", html, re.IGNORECASE):
-            raise ValueError("O HTML não possui conteúdo visual ou texto legível para importar.")
+            raise ValueError("The HTML does not contain visual content or readable text to import.")
 
         destination.mkdir(parents=True, exist_ok=True)
         content_width = self.PAGE_WIDTH - 2 * self.MARGIN
@@ -387,14 +387,14 @@ class HtmlRenderService:
             image_path = destination / f"html_page_{page_number:03d}.png"
             thumbnail_path = destination / f"html_thumbnail_{page_number:03d}.png"
             if not image.save(str(image_path), "PNG"):
-                raise OSError(f"Não foi possível gerar a imagem da página HTML {page_number}.")
+                raise OSError(f"Could not generate the HTML page image {page_number}.")
             thumbnail = image.scaled(
                 self.THUMBNAIL_SIZE,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             if not thumbnail.save(str(thumbnail_path), "PNG"):
-                raise OSError(f"Não foi possível gerar a miniatura da página HTML {page_number}.")
+                raise OSError(f"Could not generate the HTML page thumbnail {page_number}.")
 
             pages.append(
                 PdfPage(

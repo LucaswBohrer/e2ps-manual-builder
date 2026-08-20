@@ -72,7 +72,7 @@ def test_random_file_is_rejected_with_a_clear_error(tmp_path) -> None:
     source = tmp_path / "capa.qualquer_coisa"
     source.write_bytes(b"not an image")
 
-    with pytest.raises(ValueError, match="não contém uma imagem compatível"):
+    with pytest.raises(ValueError, match="does not contain a supported image"):
         convert_image_to_png(source, tmp_path / "Capa.png")
 
 

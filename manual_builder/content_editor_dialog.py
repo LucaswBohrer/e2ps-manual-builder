@@ -34,15 +34,15 @@ class ContentEditorDialog(QDialog):
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"Editar conteúdo — {title}")
+        self.setWindowTitle(f"Edit content — {title}")
         self.resize(820, 580)
         self._content: list[PdfPage | str] = list(content)
 
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "Edite a ordem e o conteúdo abaixo. Textos e avisos de imagem podem ser alterados; "
-                "páginas e recortes podem ser incluídos na posição selecionada."
+                "Edit the order and content below. Text and image notices can be changed; "
+                "pages and crops can be inserted at the selected position."
             )
         )
 
@@ -53,10 +53,10 @@ class ContentEditorDialog(QDialog):
         content_layout.addWidget(self.content_list, stretch=1)
 
         editor_layout = QVBoxLayout()
-        editor_layout.addWidget(QLabel("Texto do item selecionado:"))
+        editor_layout.addWidget(QLabel("Selected item text:"))
         self.text_editor = QTextEdit()
         self.text_editor.setPlaceholderText(
-            "Selecione um texto ou aviso de imagem para alterá-lo, ou escreva um novo bloco."
+            "Select a text or image notice to edit it, or write a new block."
         )
         editor_layout.addWidget(self.text_editor, stretch=1)
         self.status_label = QLabel()
@@ -66,32 +66,32 @@ class ContentEditorDialog(QDialog):
         layout.addLayout(content_layout, stretch=1)
 
         text_actions = QHBoxLayout()
-        self.save_text_button = QPushButton("Salvar texto selecionado")
+        self.save_text_button = QPushButton("Save Selected Text")
         self.save_text_button.clicked.connect(self._save_selected_text)
-        self.add_text_button = QPushButton("Adicionar texto após o selecionado")
+        self.add_text_button = QPushButton("Add Text After Selected")
         self.add_text_button.clicked.connect(self._add_text)
         text_actions.addWidget(self.save_text_button)
         text_actions.addWidget(self.add_text_button)
         layout.addLayout(text_actions)
 
         page_layout = QGridLayout()
-        page_layout.addWidget(QLabel("Adicionar página/recorte:"), 0, 0)
+        page_layout.addWidget(QLabel("Add page/crop:"), 0, 0)
         self.page_picker = QComboBox()
         for page in available_pages:
             self.page_picker.addItem(page.display_name, page)
         page_layout.addWidget(self.page_picker, 0, 1)
-        self.add_page_button = QPushButton("Inserir página após o selecionado")
+        self.add_page_button = QPushButton("Insert Page After Selected")
         self.add_page_button.clicked.connect(self._add_page)
         self.add_page_button.setEnabled(bool(available_pages))
         page_layout.addWidget(self.add_page_button, 0, 2)
         layout.addLayout(page_layout)
 
         order_actions = QHBoxLayout()
-        self.move_up_button = QPushButton("Mover item para cima")
+        self.move_up_button = QPushButton("Move Item Up")
         self.move_up_button.clicked.connect(lambda: self._move_selected_item(-1))
-        self.move_down_button = QPushButton("Mover item para baixo")
+        self.move_down_button = QPushButton("Move Item Down")
         self.move_down_button.clicked.connect(lambda: self._move_selected_item(1))
-        self.remove_button = QPushButton("Remover item selecionado")
+        self.remove_button = QPushButton("Remove Selected Item")
         self.remove_button.clicked.connect(self._remove_selected_item)
         order_actions.addWidget(self.move_up_button)
         order_actions.addWidget(self.move_down_button)
@@ -117,7 +117,7 @@ class ContentEditorDialog(QDialog):
             return f"📄 {item.display_name}"
         compact_text = " ".join(item.strip().split())
         if not compact_text:
-            return "✍️ Bloco de texto vazio"
+            return "✍️ Empty text block"
         if len(compact_text) > 105:
             compact_text = f"{compact_text[:102]}…"
         return f"✍️ {compact_text}"
@@ -152,11 +152,11 @@ class ContentEditorDialog(QDialog):
         self.save_text_button.setEnabled(is_text)
         if is_text:
             self.text_editor.setPlainText(item)
-            self.status_label.setText("Você pode alterar este texto e salvar a mudança.")
+            self.status_label.setText("You can edit this text and save the change.")
         else:
             self.text_editor.clear()
             self.status_label.setText(
-                "Este é um item de página/recorte. Use os botões abaixo para mover ou remover."
+                "This is a page/crop item. Use the buttons below to move or remove it."
             )
         self.move_up_button.setEnabled(row > 0)
         self.move_down_button.setEnabled(row < len(self._content) - 1)
@@ -168,22 +168,22 @@ class ContentEditorDialog(QDialog):
             return
         text = self.text_editor.toPlainText().strip()
         if not text:
-            QMessageBox.warning(self, "Texto vazio", "Escreva um texto antes de salvá-lo.")
+            QMessageBox.warning(self, "Empty text", "Write some text before saving it.")
             return
         self._content[row] = text
         self._refresh_items(row)
-        self.status_label.setText("Texto atualizado. Salve a janela para aplicar ao manual.")
+        self.status_label.setText("Text updated. Save the dialog to apply the change to the manual.")
 
     def _add_text(self) -> None:
         text = self.text_editor.toPlainText().strip()
         if not text:
-            QMessageBox.warning(self, "Texto vazio", "Escreva um texto antes de adicioná-lo.")
+            QMessageBox.warning(self, "Empty text", "Write some text before adding it.")
             return
         row = self.content_list.currentRow()
         insert_at = row + 1 if row >= 0 else len(self._content)
         self._content.insert(insert_at, text)
         self._refresh_items(insert_at)
-        self.status_label.setText("Novo bloco de texto inserido. Salve a janela para aplicar ao manual.")
+        self.status_label.setText("New text block inserted. Save the dialog to apply it to the manual.")
 
     def _add_page(self) -> None:
         page = self.page_picker.currentData()
@@ -193,7 +193,7 @@ class ContentEditorDialog(QDialog):
         insert_at = row + 1 if row >= 0 else len(self._content)
         self._content.insert(insert_at, page)
         self._refresh_items(insert_at)
-        self.status_label.setText("Página/recorte inserido. Salve a janela para aplicar ao manual.")
+        self.status_label.setText("Page/crop inserted. Save the dialog to apply it to the manual.")
 
     def _remove_selected_item(self) -> None:
         row = self.content_list.currentRow()
@@ -201,7 +201,7 @@ class ContentEditorDialog(QDialog):
             return
         self._content.pop(row)
         self._refresh_items(row)
-        self.status_label.setText("Item removido. Salve a janela para aplicar ao manual.")
+        self.status_label.setText("Item removed. Save the dialog to apply it to the manual.")
 
     def _move_selected_item(self, direction: int) -> None:
         row = self.content_list.currentRow()
@@ -215,4 +215,4 @@ class ContentEditorDialog(QDialog):
             self._content[row],
         )
         self._refresh_items(destination)
-        self.status_label.setText("Ordem atualizada. Salve a janela para aplicar ao manual.")
+        self.status_label.setText("Order updated. Save the dialog to apply it to the manual.")
