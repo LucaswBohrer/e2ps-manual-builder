@@ -37,8 +37,10 @@ A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já in
 ### Instalação em três passos
 
 1. Abra a página de [**Releases do projeto**](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest).
-2. Baixe o arquivo **`E2PS-Manual-Builder-Setup-1.0.0.exe`** na seção **Assets**.
-3. Execute o instalador e abra **E2PS Manual Builder** pelo Menu Iniciar ou pelo atalho da Área de Trabalho.
+2. Baixe o arquivo **`E2PS-Manual-Builder-V2-Setup-2.0.0.exe`** na seção **Assets**.
+3. Execute o instalador e abra **E2PS Manual Builder V2** pelo Menu Iniciar ou pelo atalho da Área de Trabalho.
+
+> A versão V2 instala em uma pasta separada e pode coexistir com instalações V1. Não é necessário desinstalar a versão anterior.
 
 | Distribuição | Quando usar | Conteúdo |
 |:--|:--|:--|
@@ -59,6 +61,7 @@ A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já in
 | **Editor de seções** | Renomeie, crie, exclua e reordene seções e subseções a qualquer momento. |
 | **Texto entre figuras** | Insira avisos, instruções, listas e explicações antes, entre ou depois das imagens. |
 | **Capa personalizada** | Selecione qualquer arquivo de imagem, independentemente da extensão; o aplicativo valida o conteúdo e converte automaticamente para `Capa.png`. |
+| **Tema claro ou escuro** | Alterne a aparência da interface a qualquer momento; a escolha é aplicada imediatamente e fica salva neste computador. |
 | **Assistente de IA** | Faça perguntas sobre o manual, obtenha sugestões de estrutura e gere textos de apoio. |
 | **Tradução técnica** | Exporte em português, inglês ou espanhol, escolhendo texto/tabela ou imagem para cada conteúdo. |
 | **Projetos `.e2ps`** | Salve e reabra o trabalho completo sem perder a montagem já realizada. |
@@ -150,6 +153,7 @@ O `.e2ps` é o formato oficial de projeto do E2PS Manual Builder. No Windows ins
 | Seções, subseções e ordem dos blocos | Sim |
 | Textos inseridos e modos de exportação | Sim |
 | Chave de API da IA | **Não** |
+| Preferência de tema claro/escuro | **Não** — fica salva localmente no computador |
 
 | Ação | Como usar |
 |:--|:--|
@@ -158,6 +162,10 @@ O `.e2ps` é o formato oficial de projeto do E2PS Manual Builder. No Windows ins
 | **Migrar arquivo antigo** | Arquivos `.emb` legados ainda podem ser abertos; ao salvar, passam a usar `.e2ps`. |
 
 Faça cópias de segurança periódicas, principalmente antes de reestruturar grandes partes do manual.
+
+### Preferência visual local
+
+No painel **Appearance**, use o campo **Application theme** para escolher **Light** ou **Dark**. A mudança é aplicada imediatamente em toda a interface, incluindo a barra de ferramentas, painéis, listas, pré-visualização, menus e cabeçalho E2PS. A preferência é salva em `QSettings` no computador atual e é restaurada na próxima abertura; ela não altera nem é incorporada ao arquivo `.e2ps`.
 
 ---
 
@@ -218,8 +226,9 @@ O executável portátil será criado em `dist\E2PS Manual Builder` e o instalado
 
 | Componente | Responsabilidade |
 |:--|:--|
-| `main.py` | Inicialização do aplicativo e abertura direta de projetos `.e2ps`. |
-| `main_window.py` | Interface principal, seções, páginas, IA e ações de projeto. |
+| `main.py` | Inicialização do aplicativo, tema salvo e abertura direta de projetos `.e2ps`. |
+| `main_window.py` | Interface principal, seções, páginas, IA, aparência e ações de projeto. |
+| `styles.py` | Stylesheets E2PS para os temas Light e Dark e seleção do tema em tempo de execução. |
 | `pdf_service.py` e `workers.py` | Renderização de PDF e tarefas de leitura em segundo plano. |
 | `html_service.py` | Leitura de HTML/HTM e aproveitamento de texto e cabeçalhos. |
 | `ai_service.py` e `translation_service.py` | Sugestões, chat, tradução e leitura visual de exceção. |

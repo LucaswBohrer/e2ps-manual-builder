@@ -16,6 +16,7 @@ except ImportError:
 from PySide6.QtCore import Qt, QSize, QSettings
 from PySide6.QtGui import QAction, QIcon, QPixmap
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QHBoxLayout,
     QComboBox,
@@ -50,6 +51,7 @@ from manual_builder.html_service import HtmlStructurePlan
 from manual_builder.project_service import ProjectExportService
 from manual_builder.project_file_service import ProjectFileService
 from manual_builder.workers import HtmlRenderWorker, PdfRenderWorker, PdfStructureWorker
+from manual_builder.styles import THEME_DARK, THEME_LIGHT, stylesheet_for_theme
 
 
 class MainWindow(QMainWindow):
@@ -77,6 +79,8 @@ class MainWindow(QMainWindow):
         self._project_path: Path | None = None
         self._project_files = ProjectFileService()
         self._settings = QSettings("E2PS", "ManualBuilder")
+        saved_theme = str(self._settings.value("ui/theme", THEME_LIGHT) or THEME_LIGHT).strip().lower()
+        self._theme = saved_theme if saved_theme in {THEME_LIGHT, THEME_DARK} else THEME_LIGHT
         self._project_generation = 0
 
         toolbar = QToolBar("Actions")
@@ -363,7 +367,19 @@ class MainWindow(QMainWindow):
 
         right_layout.addWidget(language_group)
 
-        # Right panel now only contains AI Chat and Translation Settings
+        appearance_group = QGroupBox("Appearance")
+        appearance_layout = QVBoxLayout(appearance_group)
+        appearance_layout.addWidget(QLabel("Application theme:"))
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Light", THEME_LIGHT)
+        self.theme_combo.addItem("Dark", THEME_DARK)
+        self.theme_combo.setToolTip("Choose the application theme. This preference is saved on this computer.")
+        self.theme_combo.setCurrentIndex(1 if self._theme == THEME_DARK else 0)
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        appearance_layout.addWidget(self.theme_combo)
+        right_layout.addWidget(appearance_group)
+
+        # Right panel now only contains AI Chat, translation settings and appearance
         # Preview gets its own central dedicated wide panel
 
         self.preview = QLabel("Open a PDF, HTML file, or images to begin")
@@ -416,12 +432,47 @@ class MainWindow(QMainWindow):
             self.model_input.setText(model)
         if key or base_url or model:
             self._ai_service.update_key(key, base_url, self.model_input.text().strip())
+        self._restore_theme_settings()
+
+    def _restore_theme_settings(self) -> None:
+        """Restore and apply the user's local theme preference."""
+        saved_theme = str(self._settings.value("ui/theme", self._theme) or self._theme).strip().lower()
+        theme = saved_theme if saved_theme in {THEME_LIGHT, THEME_DARK} else THEME_LIGHT
+        self._theme = theme
+        if hasattr(self, "theme_combo"):
+            self.theme_combo.blockSignals(True)
+            self.theme_combo.setCurrentIndex(1 if theme == THEME_DARK else 0)
+            self.theme_combo.blockSignals(False)
+        self._apply_theme(theme, persist=False)
+
+    def _on_theme_changed(self, index: int) -> None:
+        """Apply and persist the theme selected by the user."""
+        theme = self.theme_combo.itemData(index)
+        if theme in {THEME_LIGHT, THEME_DARK}:
+            self._apply_theme(str(theme), persist=True)
+
+    def _apply_theme(self, theme: str, persist: bool = True) -> None:
+        """Apply a theme to the whole Qt application without restarting."""
+        normalized = str(theme).strip().lower()
+        if normalized not in {THEME_LIGHT, THEME_DARK}:
+            normalized = THEME_LIGHT
+        self._theme = normalized
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(stylesheet_for_theme(normalized))
+        if persist:
+            self._settings.setValue("ui/theme", normalized)
+            self._settings.sync()
+            self.statusBar().showMessage(
+                f"Theme changed to {'Dark' if normalized == THEME_DARK else 'Light'}."
+            )
 
     def _persist_ai_settings(self) -> None:
         """Persist AI credentials only in this user's local application settings."""
         self._settings.setValue("ai/api_key", self.api_key_input.text().strip())
         self._settings.setValue("ai/base_url", self.base_url_input.text().strip())
         self._settings.setValue("ai/model", self.model_input.text().strip())
+        self._settings.setValue("ui/theme", getattr(self, "_theme", THEME_LIGHT))
         self._settings.sync()
 
     def _reset_project_state(self) -> None:

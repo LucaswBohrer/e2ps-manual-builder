@@ -81,18 +81,32 @@ def main() -> None:
         window.api_key_input.setText("gsk_test_local_only")
         window.base_url_input.setText("https://api.groq.com/openai/v1")
         window.model_input.setText("llama-3.3-70b-versatile")
+        dark_index = window.theme_combo.findData("dark")
+        assert dark_index >= 0
+        window.theme_combo.setCurrentIndex(dark_index)
+        assert window._theme == "dark"
+        assert window._settings.value("ui/theme") == "dark"
         window._persist_ai_settings()
         window.api_key_input.clear()
         window.base_url_input.clear()
         window.model_input.clear()
+        light_index = window.theme_combo.findData("light")
+        assert light_index >= 0
+        window.theme_combo.blockSignals(True)
+        window.theme_combo.setCurrentIndex(light_index)
+        window.theme_combo.blockSignals(False)
+        window._theme = "light"
         window._restore_ai_settings()
         assert window.api_key_input.text() == "gsk_test_local_only"
         assert window.base_url_input.text() == "https://api.groq.com/openai/v1"
         assert window.model_input.text() == "llama-3.3-70b-versatile"
+        assert window.theme_combo.currentData() == "dark"
+        assert window._theme == "dark"
+        assert "#17232E" in app.styleSheet()
         window.close()
         app.quit()
 
-    print("OK: projeto .e2ps e persistência local de IA validados")
+    print("OK: projeto .e2ps, persistência local de IA e tema validados")
 
 
 if __name__ == "__main__":
