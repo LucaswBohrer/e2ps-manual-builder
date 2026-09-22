@@ -1,6 +1,6 @@
 <div align="center">
 
-# E2PS Manual Builder
+# E2PS Manual Builder V3
 
 ### Estruture, traduza e exporte manuais técnicos com uma interface visual.
 
@@ -10,7 +10,7 @@
 [![Projetos](https://img.shields.io/badge/Projetos-.e2ps-6B46C1?style=for-the-badge&labelColor=1F2937)](#projetos-e2ps)
 [![Exportação](https://img.shields.io/badge/Exportação-R%20Markdown-276DC3?style=for-the-badge&labelColor=1F2937)](#exportação-r-markdown-e-pdf)
 
-**[Baixar para Windows](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest)** · **[Como usar](#fluxo-de-trabalho)** · **[IA e tradução](#ia-e-tradução)** · **[Solução de problemas](#solução-de-problemas)**
+**[Baixar para Windows](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest)** · **[Como usar](#fluxo-de-trabalho)** · **[Manual Operacional](#manual-operacional-dos-equipamentos)** · **[IA e tradução](#ia-e-tradução)** · **[Solução de problemas](#solução-de-problemas)**
 
 </div>
 
@@ -18,7 +18,7 @@
 
 ## Visão geral
 
-O **E2PS Manual Builder** é uma aplicação desktop para transformar PDFs, imagens e arquivos HTML/HTM em projetos de manuais técnicos organizados. O usuário seleciona o conteúdo relevante, cria recortes, organiza seções e subseções, adiciona explicações e exporta o resultado em **R Markdown**, pronto para revisão e geração de PDF.
+O **E2PS Manual Builder V3** é uma aplicação desktop para transformar PDFs, imagens e arquivos HTML/HTM em projetos de manuais técnicos organizados. O usuário pode escolher entre **Manual de Componentes**, com o fluxo tradicional, e **Manual Operacional dos Equipamentos**, com capa, capítulos-base editáveis, campos do equipamento, composição de figuras e exportação em português, inglês e espanhol.
 
 > **O programa foi pensado para manuais extensos.** Salve o trabalho em um arquivo `.e2ps`, feche o aplicativo e retome depois com páginas, recortes, estrutura e textos preservados.
 
@@ -37,10 +37,10 @@ A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já in
 ### Instalação em três passos
 
 1. Abra a página de [**Releases do projeto**](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest).
-2. Baixe o arquivo **`E2PS-Manual-Builder-V2-Setup-2.0.0.exe`** na seção **Assets**.
-3. Execute o instalador e abra **E2PS Manual Builder V2** pelo Menu Iniciar ou pelo atalho da Área de Trabalho.
+2. Baixe o arquivo **`E2PS-Manual-Builder-V3-Setup-3.0.0.exe`** na seção **Assets**.
+3. Execute o instalador e abra **E2PS Manual Builder V3** pelo Menu Iniciar ou pelo atalho da Área de Trabalho.
 
-> A versão V2 instala em uma pasta separada e pode coexistir com instalações V1. Não é necessário desinstalar a versão anterior.
+> A versão V3 instala em uma pasta separada e pode coexistir com instalações V1/V2. Não é necessário desinstalar as versões anteriores.
 
 | Distribuição | Quando usar | Conteúdo |
 |:--|:--|:--|
@@ -66,6 +66,10 @@ A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já in
 | **Tradução técnica** | Exporte em português, inglês ou espanhol, escolhendo texto/tabela ou imagem para cada conteúdo. |
 | **Projetos `.e2ps`** | Salve e reabra o trabalho completo sem perder a montagem já realizada. |
 | **R Markdown** | Gere um projeto organizado para revisão e compilação posterior em PDF. |
+| **Dois tipos de manual** | Alterne entre o layout de componentes e o layout operacional dos equipamentos. |
+| **Composição operacional** | Edite texto, imagens, legendas, largura e alinhamento dos blocos antes da exportação. |
+| **Base operacional editável** | Comece com os capítulos e textos-base em português e ajuste todo o conteúdo antes da exportação. |
+| **Imagens no projeto** | Adicione imagens pelo Builder, selecione onde serão utilizadas e exporte-as em `img/` com caminhos relativos. |
 
 ---
 
@@ -91,13 +95,31 @@ flowchart LR
     class F,G output;
 ```
 
-### 1. Carregue o material
+### 1. Escolha o tipo de manual e carregue o material
+
+No campo **Manual type**, selecione **Components Manual** para manter o fluxo existente ou **Operational Equipment Manual** para usar a estrutura operacional. Nesse modo, o português é o idioma-base e os campos de prefácio, segurança, sistema de controle, equipamento e fabricante ficam disponíveis para edição.
 
 Use **Open PDF**, **Open Images** ou **Open HTML**. A origem é convertida em páginas com miniaturas e pré-visualização. Em PDFs, o aplicativo aproveita o texto selecionável; em HTML, aproveita a hierarquia de cabeçalhos e identifica as imagens que precisam ser revisadas ou recortadas.
 
 Na área **Imagem da capa**, selecione o arquivo sem depender da extensão. O E2PS tenta reconhecer o conteúdo real, incluindo PNG, JPEG, WebP, AVIF, SVG e outros formatos disponíveis no ambiente. A imagem escolhida é normalizada para PNG antes de ser salva no projeto e exportada como `Capa.png`. Se o arquivo não for uma imagem válida, o aplicativo informa o erro sem alterar a capa anterior.
 
 > Para carregar um HTML com fidelidade, mantenha o arquivo `.html` junto de suas imagens, folhas de estilo e outros recursos locais.
+
+### Manual Operacional dos Equipamentos
+
+Ao escolher **Operational Equipment Manual**, o Builder prepara a estrutura do manual operacional e mantém o conteúdo inicial em português para edição. O fluxo foi pensado para manuais semelhantes ao modelo E2SOLID e contempla:
+
+1. **Capa operacional e identificação do equipamento**, incluindo tipo, modelo, número de série/ano e revisão.
+2. **Prefácio**, com objetivo, suporte, informações do produto e dados do fabricante.
+3. **Instruções de segurança** e **sistema de controle**, já carregados com uma base editável.
+4. **Capítulo 4 — Equipamento**, com campos fixos para funcionamento e funções principais, todos editáveis.
+5. **Seção `EQUIPO`**, destinada a subseções e conteúdos específicos de cada equipamento.
+
+Nenhum desses textos fica bloqueado: a base serve como ponto de partida e pode ser alterada, complementada ou substituída antes de salvar e exportar.
+
+No modo operacional, selecione as imagens importadas ou recortadas dentro de **Editar conteúdo**. Para cada figura, é possível configurar a legenda, a largura relativa e o alinhamento à esquerda, ao centro ou à direita. A ordem dos blocos define a composição final do R Markdown; assim, textos e figuras podem ser intercalados conforme a necessidade editorial.
+
+O português é o idioma-base do modo operacional. Se **English** e **Español** estiverem selecionados, o exportador gera uma pasta independente para cada idioma e traduz os textos editáveis, campos do equipamento, seções, subseções e legendas. As imagens são reutilizadas entre os idiomas, salvo quando o usuário inserir uma variação específica.
 
 ### 2. Crie recortes e selecione conteúdo
 
@@ -171,10 +193,30 @@ No painel **Appearance**, use o campo **Application theme** para escolher **Ligh
 
 ## Exportação R Markdown e PDF
 
-A exportação cria uma pasta por idioma contendo o `.Rmd` e os ativos necessários. Para compilar o PDF, abra o arquivo no RStudio ou em outro ambiente com R Markdown configurado e execute:
+A exportação cria uma pasta por idioma contendo o `manual.rmd` e os ativos necessários. No modo **Components**, a pasta segue o fluxo tradicional do Builder. No modo **Operational**, a estrutura inclui a capa, o template operacional, os arquivos de imagem em `img/` e uma pasta `output/` para os resultados da compilação.
+
+Exemplo de saída operacional:
+
+```text
+E2SOLID/
+├── Português/
+│   ├── manual.rmd
+│   ├── Capa.png
+│   ├── LogoHeader.png
+│   ├── img/
+│   └── output/
+├── English/
+│   ├── manual.rmd
+│   └── img/
+└── Español/
+    ├── manual.rmd
+    └── img/
+```
+
+Para compilar o PDF, abra o arquivo no RStudio ou em outro ambiente com R Markdown configurado e execute:
 
 ```r
-rmarkdown::render("manual.Rmd")
+rmarkdown::render("manual.rmd")
 ```
 
 A compilação requer R, Pandoc, os pacotes R necessários e uma distribuição LaTeX. Esses componentes pertencem ao ambiente de R Markdown e não são instalados pelo E2PS Manual Builder.
@@ -220,6 +262,25 @@ packaging\build_windows.bat
 
 O executável portátil será criado em `dist\E2PS Manual Builder` e o instalador em `release`.
 
+O build V3 usa `packaging/E2PSManualBuilder.spec` para o empacotamento PyInstaller e `packaging/E2PSManualBuilder.iss` para o instalador Inno Setup. A saída esperada é:
+
+```text
+dist\E2PS Manual Builder\E2PSManualBuilder.exe
+release\E2PS-Manual-Builder-V3-Setup-3.0.0.exe
+```
+
+O workflow [`windows-installer.yml`](.github/workflows/windows-installer.yml) executa esse processo em um runner Windows e publica o instalador como artefato da Release. O build Linux local pode ser feito com o mesmo arquivo `.spec`, mas gera um executável Linux, não um instalador `.exe`.
+
+### Executar os testes
+
+Depois de instalar as dependências, execute:
+
+```bash
+QT_QPA_PLATFORM=offscreen pytest -q
+```
+
+Os testes cobrem persistência de projetos, importação, estrutura de PDF, exportação, template operacional, configuração de figuras e compatibilidade do instalador.
+
 ---
 
 ## Estrutura do código
@@ -234,6 +295,9 @@ O executável portátil será criado em `dist\E2PS Manual Builder` e o instalado
 | `ai_service.py` e `translation_service.py` | Sugestões, chat, tradução e leitura visual de exceção. |
 | `project_service.py` | Montagem do R Markdown e organização de ativos de exportação. |
 | `project_file_service.py` | Leitura e gravação dos projetos `.e2ps`. |
+| `content_editor_dialog.py` | Edição da ordem de textos e páginas e configuração de legenda, largura e alinhamento das figuras. |
+| `assets/operational_template.rmd` | Template-base do Manual Operacional dos Equipamentos. |
+| `test_operational_manual.py` | Testes do template operacional, exportação de imagens e persistência dos novos metadados. |
 | `packaging/` | Configuração do PyInstaller, Inno Setup e criação do instalador Windows. |
 
 ---

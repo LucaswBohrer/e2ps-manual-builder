@@ -25,9 +25,9 @@ if not exist "%ISCC%" goto :missing_inno
 if errorlevel 1 goto :error
 
 echo.
-echo V2 build completed successfully.
+echo V3 build completed successfully.
 echo Executable: dist\E2PS Manual Builder\E2PSManualBuilder.exe
-echo Installer: release\E2PS-Manual-Builder-V2-Setup-2.0.0.exe
+echo Installer: release\E2PS-Manual-Builder-V3-Setup-3.0.0.exe
 exit /b 0
 
 :missing_inno

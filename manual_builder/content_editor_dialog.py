@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Sequence
 
 from PySide6.QtCore import Qt
@@ -62,6 +63,25 @@ class ContentEditorDialog(QDialog):
         self.status_label = QLabel()
         self.status_label.setWordWrap(True)
         editor_layout.addWidget(self.status_label)
+        figure_layout = QGridLayout()
+        figure_layout.addWidget(QLabel("Figure caption:"), 0, 0)
+        self.figure_caption_input = QTextEdit()
+        self.figure_caption_input.setMaximumHeight(48)
+        figure_layout.addWidget(self.figure_caption_input, 0, 1)
+        figure_layout.addWidget(QLabel("Width:"), 1, 0)
+        self.figure_width_input = QComboBox()
+        for width in ("20%", "35%", "50%", "70%", "94%", "100%"):
+            self.figure_width_input.addItem(width, width)
+        figure_layout.addWidget(self.figure_width_input, 1, 1)
+        figure_layout.addWidget(QLabel("Alignment:"), 2, 0)
+        self.figure_alignment_input = QComboBox()
+        for alignment in ("left", "center", "right"):
+            self.figure_alignment_input.addItem(alignment.title(), alignment)
+        figure_layout.addWidget(self.figure_alignment_input, 2, 1)
+        self.save_figure_button = QPushButton("Save Figure Layout")
+        self.save_figure_button.clicked.connect(self._save_figure_layout)
+        figure_layout.addWidget(self.save_figure_button, 3, 0, 1, 2)
+        editor_layout.addLayout(figure_layout)
         content_layout.addLayout(editor_layout, stretch=1)
         layout.addLayout(content_layout, stretch=1)
 
@@ -153,11 +173,19 @@ class ContentEditorDialog(QDialog):
         if is_text:
             self.text_editor.setPlainText(item)
             self.status_label.setText("You can edit this text and save the change.")
+            self.figure_caption_input.clear()
+            self.save_figure_button.setEnabled(False)
         else:
             self.text_editor.clear()
             self.status_label.setText(
-                "This is a page/crop item. Use the buttons below to move or remove it."
+                "This is a page/crop item. Configure its caption, width and alignment below."
             )
+            self.figure_caption_input.setPlainText(item.figure_caption)
+            width_index = self.figure_width_input.findData(item.figure_width)
+            self.figure_width_input.setCurrentIndex(width_index if width_index >= 0 else 4)
+            alignment_index = self.figure_alignment_input.findData(item.figure_alignment)
+            self.figure_alignment_input.setCurrentIndex(alignment_index if alignment_index >= 0 else 1)
+            self.save_figure_button.setEnabled(True)
         self.move_up_button.setEnabled(row > 0)
         self.move_down_button.setEnabled(row < len(self._content) - 1)
         self.remove_button.setEnabled(True)
@@ -173,6 +201,20 @@ class ContentEditorDialog(QDialog):
         self._content[row] = text
         self._refresh_items(row)
         self.status_label.setText("Text updated. Save the dialog to apply the change to the manual.")
+
+    def _save_figure_layout(self) -> None:
+        row = self.content_list.currentRow()
+        if not 0 <= row < len(self._content) or not isinstance(self._content[row], PdfPage):
+            return
+        page = self._content[row]
+        self._content[row] = replace(
+            page,
+            figure_caption=self.figure_caption_input.toPlainText().strip(),
+            figure_width=str(self.figure_width_input.currentData()),
+            figure_alignment=str(self.figure_alignment_input.currentData()),
+        )
+        self._refresh_items(row)
+        self.status_label.setText("Figure layout updated. Save the dialog to apply it to the manual.")
 
     def _add_text(self) -> None:
         text = self.text_editor.toPlainText().strip()

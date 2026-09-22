@@ -12,7 +12,7 @@ from manual_builder.models import ManualSection, ManualSubsection, PdfPage
 
 
 PROJECT_FORMAT = "E2PS Manual Builder"
-PROJECT_VERSION = 1
+PROJECT_VERSION = 2
 
 
 @dataclass(slots=True)
@@ -95,6 +95,9 @@ class ProjectFileService:
                         "extracted_text": page.extracted_text,
                         "export_mode": page.export_mode,
                         "source_type": page.source_type,
+                        "figure_caption": page.figure_caption,
+                        "figure_width": page.figure_width,
+                        "figure_alignment": page.figure_alignment,
                     }
                 )
 
@@ -159,7 +162,8 @@ class ProjectFileService:
 
                 if manifest.get("format") != PROJECT_FORMAT:
                     raise ValueError("This file is not an E2PS Manual Builder project.")
-                if manifest.get("version") != PROJECT_VERSION:
+                version = int(manifest.get("version", 1))
+                if version not in {1, PROJECT_VERSION}:
                     raise ValueError("This .e2ps file version is not compatible yet.")
 
                 pages: list[PdfPage] = []
@@ -179,6 +183,9 @@ class ProjectFileService:
                         extracted_text=str(page_data.get("extracted_text", "")),
                         export_mode=str(page_data.get("export_mode", "image")),
                         source_type=str(page_data.get("source_type", "pdf")),
+                        figure_caption=str(page_data.get("figure_caption", "")),
+                        figure_width=str(page_data.get("figure_width", "94%")),
+                        figure_alignment=str(page_data.get("figure_alignment", "center")),
                     )
                     pages.append(page)
                     pages_by_id[str(page_data["id"])] = page

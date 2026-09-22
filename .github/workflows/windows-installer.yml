@@ -1,4 +1,4 @@
-name: E2PS Manual Builder V2 - Windows installer
+name: E2PS Manual Builder V3 - Windows installer
 
 on:
   workflow_dispatch:
@@ -36,8 +36,8 @@ jobs:
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: release/E2PS-Manual-Builder-V2-Setup-2.0.0.exe
-          name: E2PS Manual Builder V2 ${{ github.ref_name }}
+          files: release/E2PS-Manual-Builder-V3-Setup-3.0.0.exe
+          name: E2PS Manual Builder V3 ${{ github.ref_name }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ github.token }}

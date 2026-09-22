@@ -113,6 +113,19 @@ Code:{manual_code}
 """
 
 
+OPERATIONAL_TEMPLATE_PATH = Path(__file__).parent / "assets" / "operational_template.rmd"
+OPERATIONAL_DEFAULTS = {
+    "objective": "Este manual tiene como objetivo ayudar en la comprensión y aclaración de las operaciones manuales y automáticas, la parametrización, el análisis de históricos y la accesibilidad del equipo.",
+    "support": "Para dudas o consultas, contacte con E2PS por los canales oficiales de soporte indicados en la documentación del equipo.",
+    "product_info": "Para obtener más información sobre E2PS, sus productos y servicios, visite www.e2ps.com.",
+    "manufacturer": "Razón Social: E2PS ENGENHARIA E EQUIPAMENTOS INDUSTRIALES LTDA\nDirección: Av. João Pedro Dias, 1428\nCampo Bom/RS – Brasil\nCNPJ: 04.638.833/0001–33",
+    "safety": "- Lea atentamente todo el manual antes de operar el equipo.\n- Las operaciones manuales deben ser realizadas únicamente por personal capacitado y autorizado.\n- Antes de cualquier mantenimiento, desconecte, bloquee y verifique las condiciones seguras del equipo.\n- Utilice equipos de protección individual y componentes originales.\n- Respete las normas de seguridad aplicables y las instrucciones de capacitación.",
+    "control": "El HMI es la interfaz de comunicación para la operación de los componentes automáticos del equipo. Las pantallas, comandos, TAGs, alarmas y niveles de acceso deben utilizarse conforme a la configuración suministrada por E2PS.",
+    "equipment_operation": "Describa aquí el funcionamiento general del equipo, su objetivo de proceso y las condiciones de operación.",
+    "equipment_functions": "- Función principal del equipo.\n- Control de los parámetros operativos.\n- Registro y trazabilidad de los datos.\n- Procedimientos de limpieza y mantenimiento.",
+}
+
+
 class ProjectExportService:
     """Export selected pages as standard E2PS R Markdown projects."""
 
@@ -136,6 +149,8 @@ class ProjectExportService:
         manual_code: str = "",
         publication_date: str | None = None,
         cover_image_path: Path | None = None,
+        manual_type: str = "components",
+        operational_metadata: dict[str, object] | None = None,
     ) -> Path:
         """Create the original single-language Portuguese project format."""
         project_dir = destination / self._safe_name(title)
@@ -147,6 +162,8 @@ class ProjectExportService:
             publication_date or date.today().strftime("%Y-%m"),
             "pt",
             cover_image_path=cover_image_path,
+            manual_type=manual_type,
+            operational_metadata=operational_metadata,
         )
         return project_dir
 
@@ -165,6 +182,8 @@ class ProjectExportService:
         on_progress: Callable[[int, int], None],
         model: str = "llama-3.3-70b-versatile",
         cover_image_path: Path | None = None,
+        manual_type: str = "components",
+        operational_metadata: dict[str, object] | None = None,
     ) -> Path:
         """Create independent language folders and translate non-source pages with AI."""
         project_dir = destination / self._safe_name(title)
@@ -253,6 +272,8 @@ class ProjectExportService:
                 else False,
                 page_exported,
                 cover_image_path=cover_image_path,
+                manual_type=manual_type,
+                operational_metadata=operational_metadata,
             )
             completed_pages += pages_in_language
         return project_dir
@@ -269,6 +290,8 @@ class ProjectExportService:
         translate_images: bool = False,
         on_page_exported: Callable[[], None] | None = None,
         cover_image_path: Path | None = None,
+        manual_type: str = "components",
+        operational_metadata: dict[str, object] | None = None,
     ) -> None:
         """Write one standalone manual, translating its selected PNG pages when asked."""
         image_dir = project_dir / "img"
@@ -276,6 +299,20 @@ class ProjectExportService:
         image_dir.mkdir(parents=True, exist_ok=True)
         output_dir.mkdir(exist_ok=True)
         self._copy_standard_assets(project_dir, cover_image_path)
+
+        if manual_type == "operational":
+            self._write_operational_language_project(
+                project_dir,
+                title,
+                sections,
+                publication_date,
+                language,
+                translator,
+                translate_images,
+                on_page_exported,
+                operational_metadata or {},
+            )
+            return
 
         section_blocks: list[str] = []
         for section_index, section in enumerate(sections, start=1):
@@ -324,6 +361,95 @@ class ProjectExportService:
         )
         (project_dir / "manual.rmd").write_text(content, encoding="utf-8")
 
+    def _write_operational_language_project(
+        self,
+        project_dir: Path,
+        title: str,
+        sections: list[ManualSection],
+        publication_date: str,
+        language: str,
+        translator: TranslationService | None,
+        translate_images: bool,
+        on_page_exported: Callable[[], None] | None,
+        metadata: dict[str, object],
+    ) -> None:
+        """Render the editable, equipment-oriented V3 manual template."""
+        template = OPERATIONAL_TEMPLATE_PATH.read_text(encoding="utf-8")
+
+        def value(key: str, default: str = "") -> str:
+            raw = str(metadata.get(key, default) or default)
+            if translator is not None and language != str(metadata.get("source_language", "pt")):
+                try:
+                    raw = translator.translate_text(raw, language)
+                except Exception:
+                    pass
+            return self._format_rmd_text(raw)
+
+        replacements = {
+            "__TITLE__": value("title", title),
+            "__PUBLICATION_DATE__": publication_date,
+            "__REVISION__": value("revision", "01"),
+            "__OBJECTIVE__": value("objective", OPERATIONAL_DEFAULTS["objective"]),
+            "__SUPPORT__": value("support", OPERATIONAL_DEFAULTS["support"]),
+            "__PRODUCT_INFO__": value("product_info", OPERATIONAL_DEFAULTS["product_info"]),
+            "__MANUFACTURER__": value("manufacturer", OPERATIONAL_DEFAULTS["manufacturer"]),
+            "__EQUIPMENT_TYPE__": value("equipment_type", ""),
+            "__MODEL__": value("model", ""),
+            "__SERIAL_YEAR__": value("serial_year", ""),
+            "__SAFETY__": value("safety", OPERATIONAL_DEFAULTS["safety"]),
+            "__CONTROL__": value("control", OPERATIONAL_DEFAULTS["control"]),
+            "__EQUIPMENT_OPERATION__": value(
+                "equipment_operation", OPERATIONAL_DEFAULTS["equipment_operation"]
+            ),
+            "__EQUIPMENT_FUNCTIONS__": value(
+                "equipment_functions", OPERATIONAL_DEFAULTS["equipment_functions"]
+            ),
+        }
+
+        user_sections: list[str] = []
+        equipment_content: list[str] = []
+        for section_index, section in enumerate(sections, start=1):
+            section_content = self._render_mixed_content(
+                section.content,
+                section_index,
+                0,
+                project_dir / "img",
+                language,
+                translator,
+                translate_images,
+                on_page_exported,
+                content_title=section.title,
+            )
+            subsection_content: list[str] = []
+            for subsection_index, subsection in enumerate(section.subsections, start=1):
+                rendered = self._render_mixed_content(
+                    subsection.content,
+                    section_index,
+                    subsection_index,
+                    project_dir / "img",
+                    language,
+                    translator,
+                    translate_images,
+                    on_page_exported,
+                    content_title=f"{section.title}\n{subsection.title}",
+                )
+                if rendered.strip():
+                    subsection_content.append(f"## {subsection.title}\n\n{rendered}")
+            body = "\n\n".join(part for part in [section_content, *subsection_content] if part.strip())
+            if not body.strip():
+                continue
+            block = f"## {section.title}\n\n{body}"
+            if section.title.strip().casefold() in {"equipo", "equipment", "equipamento"}:
+                equipment_content.append(block)
+            else:
+                user_sections.append(block)
+
+        replacements["__USER_SECTIONS__"] = "\n\n".join(user_sections)
+        replacements["__EQUIPMENT_CONTENT__"] = "\n\n".join(equipment_content)
+        for marker, replacement in replacements.items():
+            template = template.replace(marker, replacement)
+        (project_dir / "manual.rmd").write_text(template, encoding="utf-8")
+
     _VISUAL_SECTION_TERMS = (
         "imagem", "ilustra", "figura", "desenho", "diagrama", "vista explodida",
         "peças", "pecas", "parts", "spare",
@@ -371,13 +497,19 @@ class ProjectExportService:
         subsection_index: int,
         page_counter: int,
         filename: str,
+        width: str = "94%",
+        alignment: str = "center",
+        caption: str = "",
     ) -> str:
         """Return a stable R Markdown image block for an intentionally visual page."""
+        safe_width = width.strip() if re.fullmatch(r"\d{1,3}%", width.strip()) else "94%"
+        safe_alignment = alignment if alignment in {"left", "center", "right"} else "center"
+        caption_line = f", fig.cap='{caption.replace(chr(39), chr(39) + chr(39))}'" if caption.strip() else ""
         return (
             "```{r section_%03d_subsection_%03d_page_%03d, echo=FALSE, "
-            "fig.align='center', out.width='94%%', fig.pos='H'}\n"
+            "fig.align='%s', out.width='%s', fig.pos='H'%s}\n"
             "knitr::include_graphics('img/%s')\n```"
-            % (section_index, subsection_index, page_counter, filename)
+            % (section_index, subsection_index, page_counter, safe_alignment, safe_width, caption_line, filename)
         )
 
     @staticmethod
@@ -551,7 +683,15 @@ class ProjectExportService:
             if translate_images and translator is not None and getattr(item, "export_mode", "image") == "image":
                 translator.translate_page(item.image_path, target, language)
             rendered_blocks.append(
-                self._image_rmd_block(section_index, subsection_index, page_counter, item.filename)
+                self._image_rmd_block(
+                    section_index,
+                    subsection_index,
+                    page_counter,
+                    item.filename,
+                    getattr(item, "figure_width", "94%"),
+                    getattr(item, "figure_alignment", "center"),
+                    getattr(item, "figure_caption", ""),
+                )
             )
             if on_page_exported is not None:
                 on_page_exported()

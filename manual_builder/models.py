@@ -18,6 +18,9 @@ class PdfPage:
     extracted_text: str = ""
     export_mode: str = "image"  # "image" or "text"
     source_type: str = "pdf"  # "pdf", "image" or "html"
+    figure_caption: str = ""
+    figure_width: str = "94%"
+    figure_alignment: str = "center"
     # Texto de apoio produzido por visão/OCR para sugerir a estrutura. Ele nunca substitui
     # ``extracted_text`` e jamais é enviado diretamente ao exportador final.
     visual_outline_text: str = ""

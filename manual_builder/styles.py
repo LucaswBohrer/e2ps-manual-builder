@@ -1,4 +1,4 @@
-"""Application-wide visual themes for the E2PS Manual Builder V2."""
+"""Application-wide visual themes for the E2PS Manual Builder V3."""
 
 THEME_LIGHT = "light"
 THEME_DARK = "dark"

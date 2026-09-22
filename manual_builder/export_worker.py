@@ -31,6 +31,8 @@ class MultilingualExportWorker(QThread):
         translation_endpoint: str,
         model: str = "llama-3.3-70b-versatile",
         cover_image_path: Path | None = None,
+        manual_type: str = "components",
+        operational_metadata: dict[str, object] | None = None,
     ) -> None:
         super().__init__()
         self._destination = destination
@@ -45,6 +47,8 @@ class MultilingualExportWorker(QThread):
         self._translation_endpoint = translation_endpoint
         self._model = model
         self._cover_image_path = cover_image_path
+        self._manual_type = manual_type
+        self._operational_metadata = operational_metadata or {}
 
     def run(self) -> None:
         """Run the export service and forward progress to the UI thread."""
@@ -63,6 +67,8 @@ class MultilingualExportWorker(QThread):
                 self.progress_changed.emit,
                 model=self._model,
                 cover_image_path=self._cover_image_path,
+                manual_type=self._manual_type,
+                operational_metadata=self._operational_metadata,
             )
             self.completed.emit(str(project))
         except Exception as error:

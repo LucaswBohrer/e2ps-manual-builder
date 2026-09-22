@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QCheckBox,
     QGroupBox,
+    QFormLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -48,7 +49,7 @@ from manual_builder.content_editor_dialog import ContentEditorDialog
 from manual_builder.crop_dialog import CropDialog
 from manual_builder.export_worker import MultilingualExportWorker
 from manual_builder.html_service import HtmlStructurePlan
-from manual_builder.project_service import ProjectExportService
+from manual_builder.project_service import OPERATIONAL_DEFAULTS, ProjectExportService
 from manual_builder.project_file_service import ProjectFileService
 from manual_builder.workers import HtmlRenderWorker, PdfRenderWorker, PdfStructureWorker
 from manual_builder.styles import THEME_DARK, THEME_LIGHT, stylesheet_for_theme
@@ -119,6 +120,13 @@ class MainWindow(QMainWindow):
         self.title_input.setMinimumWidth(250)
         toolbar.addWidget(self.title_input)
         toolbar.addSeparator()
+        toolbar.addWidget(QLabel("Manual type:"))
+        self.manual_type_combo = QComboBox()
+        self.manual_type_combo.addItem("Components Manual", "components")
+        self.manual_type_combo.addItem("Operational Equipment Manual", "operational")
+        self.manual_type_combo.currentIndexChanged.connect(self._on_manual_type_changed)
+        toolbar.addWidget(self.manual_type_combo)
+        toolbar.addSeparator()
         toolbar.addWidget(QLabel("Code:"))
         self.code_input = QLineEdit()
         self.code_input.setPlaceholderText("e.g. 04945")
@@ -144,7 +152,7 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(self.export_project)
         toolbar.addWidget(self.export_button)
 
-        # E2PS V2 brand header: keep the product identity visible inside the workspace.
+        # E2PS V3 brand header: keep the product identity visible inside the workspace.
         brand_header = QWidget()
         brand_header.setObjectName("brand_header")
         brand_layout = QHBoxLayout(brand_header)
@@ -167,7 +175,7 @@ class MainWindow(QMainWindow):
         brand_layout.addWidget(brand_logo)
 
         brand_text_layout = QVBoxLayout()
-        brand_title = QLabel("E2PS Manual Builder V2")
+        brand_title = QLabel("E2PS Manual Builder V3")
         brand_title.setObjectName("brand_title")
         brand_subtitle = QLabel("Technical manual workspace · AI-assisted documentation")
         brand_subtitle.setObjectName("brand_subtitle")
@@ -367,6 +375,47 @@ class MainWindow(QMainWindow):
 
         right_layout.addWidget(language_group)
 
+        operational_group = QGroupBox("Operational manual content (editable)")
+        operational_form = QFormLayout(operational_group)
+        self.operational_type_input = QLineEdit()
+        self.operational_type_input.setPlaceholderText("Equipment type")
+        self.operational_model_input = QLineEdit()
+        self.operational_model_input.setPlaceholderText("Model")
+        self.operational_serial_input = QLineEdit()
+        self.operational_serial_input.setPlaceholderText("Serial number / manufacturing year")
+        self.operational_revision_input = QLineEdit("01")
+        self.operational_objective_input = QTextEdit()
+        self.operational_objective_input.setMaximumHeight(54)
+        self.operational_support_input = QTextEdit()
+        self.operational_support_input.setMaximumHeight(54)
+        self.operational_product_input = QTextEdit()
+        self.operational_product_input.setMaximumHeight(54)
+        self.operational_manufacturer_input = QTextEdit()
+        self.operational_manufacturer_input.setMaximumHeight(72)
+        self.operational_safety_input = QTextEdit()
+        self.operational_safety_input.setMaximumHeight(72)
+        self.operational_control_input = QTextEdit()
+        self.operational_control_input.setMaximumHeight(72)
+        self.operational_operation_input = QTextEdit()
+        self.operational_operation_input.setMaximumHeight(72)
+        self.operational_functions_input = QTextEdit()
+        self.operational_functions_input.setMaximumHeight(72)
+        operational_form.addRow("Equipment type:", self.operational_type_input)
+        operational_form.addRow("Model:", self.operational_model_input)
+        operational_form.addRow("Serial/year:", self.operational_serial_input)
+        operational_form.addRow("Revision:", self.operational_revision_input)
+        operational_form.addRow("Objective:", self.operational_objective_input)
+        operational_form.addRow("Support:", self.operational_support_input)
+        operational_form.addRow("Product info:", self.operational_product_input)
+        operational_form.addRow("Manufacturer:", self.operational_manufacturer_input)
+        operational_form.addRow("Safety:", self.operational_safety_input)
+        operational_form.addRow("Control system:", self.operational_control_input)
+        operational_form.addRow("Equipment operation:", self.operational_operation_input)
+        operational_form.addRow("Main functions:", self.operational_functions_input)
+        right_layout.addWidget(operational_group)
+        self._operational_group = operational_group
+        self._set_operational_fields_enabled(False)
+
         appearance_group = QGroupBox("Appearance")
         appearance_layout = QVBoxLayout(appearance_group)
         appearance_layout.addWidget(QLabel("Application theme:"))
@@ -445,6 +494,55 @@ class MainWindow(QMainWindow):
             self.theme_combo.blockSignals(False)
         self._apply_theme(theme, persist=False)
 
+    def _set_operational_fields_enabled(self, enabled: bool) -> None:
+        """Toggle operational-only metadata controls without affecting component manuals."""
+        self._operational_group.setVisible(enabled)
+        for widget in (
+            self.operational_type_input,
+            self.operational_model_input,
+            self.operational_serial_input,
+            self.operational_revision_input,
+            self.operational_objective_input,
+            self.operational_support_input,
+            self.operational_product_input,
+            self.operational_manufacturer_input,
+            self.operational_safety_input,
+            self.operational_control_input,
+            self.operational_operation_input,
+            self.operational_functions_input,
+        ):
+            widget.setEnabled(enabled)
+
+    def _set_operational_defaults(self) -> None:
+        """Load the Portuguese editable base for a new operational manual."""
+        self.operational_objective_input.setPlainText(OPERATIONAL_DEFAULTS["objective"])
+        self.operational_support_input.setPlainText(OPERATIONAL_DEFAULTS["support"])
+        self.operational_product_input.setPlainText(OPERATIONAL_DEFAULTS["product_info"])
+        self.operational_manufacturer_input.setPlainText(OPERATIONAL_DEFAULTS["manufacturer"])
+        self.operational_safety_input.setPlainText(OPERATIONAL_DEFAULTS["safety"])
+        self.operational_control_input.setPlainText(OPERATIONAL_DEFAULTS["control"])
+        self.operational_operation_input.setPlainText(OPERATIONAL_DEFAULTS["equipment_operation"])
+        self.operational_functions_input.setPlainText(OPERATIONAL_DEFAULTS["equipment_functions"])
+
+    def _on_manual_type_changed(self, index: int) -> None:
+        """Switch the visible editor and reset operational defaults only for a blank project."""
+        manual_type = self.manual_type_combo.itemData(index)
+        operational = manual_type == "operational"
+        self._set_operational_fields_enabled(operational)
+        if operational:
+            source_index = self.source_language.findData("pt")
+            if source_index >= 0:
+                self.source_language.setCurrentIndex(source_index)
+            self.pt_language.setChecked(True)
+            self.en_language.setChecked(True)
+            self.es_language.setChecked(True)
+            if not self._sections and not self._pages:
+                self._set_operational_defaults()
+        self.statusBar().showMessage(
+            "Operational equipment manual selected." if operational else "Components manual selected.",
+            5000,
+        )
+
     def _on_theme_changed(self, index: int) -> None:
         """Apply and persist the theme selected by the user."""
         theme = self.theme_combo.itemData(index)
@@ -495,6 +593,7 @@ class MainWindow(QMainWindow):
         self.export_mode_combo.setEnabled(False)
 
         self.title_input.setText("E2PS Technical Manual")
+        self.manual_type_combo.setCurrentIndex(self.manual_type_combo.findData("components"))
         self.code_input.clear()
         today = date.today()
         self.year_input.setCurrentText(str(today.year))
@@ -507,6 +606,14 @@ class MainWindow(QMainWindow):
         self.es_language.setChecked(False)
         self.cover_path_input.clear()
         self.cover_path_input.setToolTip("")
+        self.operational_type_input.clear()
+        self.operational_model_input.clear()
+        self.operational_serial_input.clear()
+        self.operational_revision_input.setText("01")
+        self.operational_support_input.clear()
+        self.operational_product_input.clear()
+        self.operational_manufacturer_input.clear()
+        self._set_operational_defaults()
         self.section_name.clear()
         self.subsection_name.clear()
         self.content_text_input.clear()
@@ -556,6 +663,7 @@ class MainWindow(QMainWindow):
         """Return editable UI data that belongs in a portable project archive."""
         return {
             "title": self.title_input.text().strip(),
+            "manual_type": self.manual_type_combo.currentData(),
             "code": self.code_input.text().strip(),
             "year": self.year_input.currentText(),
             "semester": self.semester_input.currentData(),
@@ -565,11 +673,30 @@ class MainWindow(QMainWindow):
                 "en": self.en_language.isChecked(),
                 "es": self.es_language.isChecked(),
             },
+            "operational": {
+                "title": self.title_input.text().strip(),
+                "source_language": self.source_language.currentData(),
+                "equipment_type": self.operational_type_input.text().strip(),
+                "model": self.operational_model_input.text().strip(),
+                "serial_year": self.operational_serial_input.text().strip(),
+                "revision": self.operational_revision_input.text().strip(),
+                "objective": self.operational_objective_input.toPlainText().strip(),
+                "support": self.operational_support_input.toPlainText().strip(),
+                "product_info": self.operational_product_input.toPlainText().strip(),
+                "manufacturer": self.operational_manufacturer_input.toPlainText().strip(),
+                "safety": self.operational_safety_input.toPlainText().strip(),
+                "control": self.operational_control_input.toPlainText().strip(),
+                "equipment_operation": self.operational_operation_input.toPlainText().strip(),
+                "equipment_functions": self.operational_functions_input.toPlainText().strip(),
+            },
         }
 
     def _apply_project_metadata(self, metadata: dict[str, object]) -> None:
         """Restore editable UI controls from an .e2ps manifest."""
         self.title_input.setText(str(metadata.get("title", "E2PS Technical Manual")))
+        manual_type = str(metadata.get("manual_type", "components"))
+        type_index = self.manual_type_combo.findData(manual_type)
+        self.manual_type_combo.setCurrentIndex(type_index if type_index >= 0 else 0)
         self.code_input.setText(str(metadata.get("code", "")))
         year = str(metadata.get("year", ""))
         if self.year_input.findText(year) >= 0:
@@ -586,6 +713,38 @@ class MainWindow(QMainWindow):
             self.pt_language.setChecked(bool(languages.get("pt", True)))
             self.en_language.setChecked(bool(languages.get("en", False)))
             self.es_language.setChecked(bool(languages.get("es", False)))
+        operational = metadata.get("operational", {})
+        if isinstance(operational, dict):
+            self.operational_type_input.setText(str(operational.get("equipment_type", "")))
+            self.operational_model_input.setText(str(operational.get("model", "")))
+            self.operational_serial_input.setText(str(operational.get("serial_year", "")))
+            self.operational_revision_input.setText(str(operational.get("revision", "01")))
+            self.operational_objective_input.setPlainText(
+                str(operational.get("objective", OPERATIONAL_DEFAULTS["objective"]))
+            )
+            self.operational_support_input.setPlainText(
+                str(operational.get("support", OPERATIONAL_DEFAULTS["support"]))
+            )
+            self.operational_product_input.setPlainText(
+                str(operational.get("product_info", OPERATIONAL_DEFAULTS["product_info"]))
+            )
+            self.operational_manufacturer_input.setPlainText(
+                str(operational.get("manufacturer", OPERATIONAL_DEFAULTS["manufacturer"]))
+            )
+            self.operational_safety_input.setPlainText(
+                str(operational.get("safety", OPERATIONAL_DEFAULTS["safety"]))
+            )
+            self.operational_control_input.setPlainText(
+                str(operational.get("control", OPERATIONAL_DEFAULTS["control"]))
+            )
+            self.operational_operation_input.setPlainText(
+                str(operational.get("equipment_operation", OPERATIONAL_DEFAULTS["equipment_operation"]))
+            )
+            self.operational_functions_input.setPlainText(
+                str(operational.get("equipment_functions", OPERATIONAL_DEFAULTS["equipment_functions"]))
+            )
+        elif manual_type == "operational":
+            self._set_operational_defaults()
 
     def _populate_page_list(self) -> None:
         """Render the current project pages in the source-page list."""
@@ -1267,6 +1426,9 @@ class MainWindow(QMainWindow):
         key = self.api_key_input.text().strip()
         endpoint = self.base_url_input.text().strip()
         model_name = self.model_input.text().strip() or "llama-3.3-70b-versatile"
+        project_metadata = self._project_metadata()
+        manual_type = str(project_metadata.get("manual_type", "components"))
+        operational_metadata = project_metadata.get("operational", {})
         self._export_generation = self._project_generation
         self._export_worker = MultilingualExportWorker(
             Path(destination),
@@ -1281,6 +1443,8 @@ class MainWindow(QMainWindow):
             endpoint,
             model=model_name,
             cover_image_path=cover_path,
+            manual_type=manual_type,
+            operational_metadata=operational_metadata if isinstance(operational_metadata, dict) else {},
         )
         self._export_worker.progress_changed.connect(self._update_export_progress)
         self._export_worker.completed.connect(self._export_finished)

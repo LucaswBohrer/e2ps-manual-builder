@@ -1,0 +1,115 @@
+---
+author: "E2PS"
+fontsize: 10pt
+geometry: margin=2.2cm
+output:
+  pdf_document:
+    latex_engine: lualatex
+    toc: true
+    lof: true
+    number_sections: true
+  html_document:
+    toc: true
+    toc_float: true
+header-includes:
+  - \usepackage{float}
+  - \usepackage{fontspec}
+  - \setmainfont{Gotham Rounded Book}
+  - \usepackage{xcolor}
+  - \usepackage{sectsty}
+  - \sectionfont{\bfseries\color{orange}}
+  - \subsectionfont{\color{orange}}
+  - \usepackage{fancyhdr}
+  - \pagestyle{fancy}
+  - \fancyhead{}
+  - \setlength{\headheight}{42pt}
+  - \fancyhead[L]{\includegraphics[width=0.15\textwidth]{LogoHeader.png}}
+  - \fancyfoot{}
+  - \renewcommand{\headrulewidth}{0pt}
+  - \renewcommand{\footrulewidth}{0pt}
+  - \usepackage{caption}
+  - \usepackage{booktabs}
+  - \usepackage{longtable}
+  - \usepackage{array}
+  - \usepackage{hyperref}
+  - \hypersetup{colorlinks=true,linkcolor=orange,urlcolor=orange}
+  - \usepackage{tocloft}
+  - \renewcommand{\cftsecfont}{\bfseries\color{orange}}
+  - \renewcommand{\cftsecpagefont}{\bfseries\color{orange}}
+  - \renewcommand{\listfigurename}{Indice de Figuras}
+  - \renewcommand{\contentsname}{SUMARIO}
+  - \fancyfoot[C]{\fontsize{8}{10}\selectfont E2PS Group \bullet Av. João Pedro Dias, 1428 \bullet Campo Bom - RS \bullet Tel:(51) 3299-4400 \bullet confianca@e2ps.com \bullet e2ps.com \newline \thepage}
+---
+
+<style>
+body { font-family: Gotham Rounded Book; }
+h1, h2, h3, h4 { color: #F28C28; }
+</style>
+
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{center}
+\includegraphics[width=0.22\textwidth]{LogoHeader.png}
+\vfill
+{\Huge\bfseries Manual Operacional\\[0.35cm]}
+{\LARGE __TITLE__}
+\vfill
+\includegraphics[width=0.58\textwidth]{Capa.png}
+\vfill
+\begin{flushleft}
+__PUBLICATION_DATE__
+\end{flushleft}
+\begin{flushright}
+Revisión: __REVISION__
+\end{flushright}
+\end{center}
+\end{titlepage}
+
+\tableofcontents
+\listoffigures
+\newpage
+
+# 1 PREFACIO
+
+## 1.1 Objetivo
+__OBJECTIVE__
+
+## 1.2 Soporte
+__SUPPORT__
+
+## 1.3 Información del producto
+__PRODUCT_INFO__
+
+## 1.4 Datos del fabricante
+__MANUFACTURER__
+
+## 1.5 Datos del equipo
+
+| Campo | Valor |
+|:--|:--|
+| Tipo | __EQUIPMENT_TYPE__ |
+| Modelo | __MODEL__ |
+| Número de serie / año de fabricación | __SERIAL_YEAR__ |
+| Normas aplicadas | NR10, NR12 e NR13 |
+
+# 2 INSTRUCCIONES DE SEGURIDAD
+
+__SAFETY__
+
+# 3 SISTEMA DEL CONTROL
+
+__CONTROL__
+
+# 4 EQUIPO
+
+## 4.1 Funcionamiento del equipo
+__EQUIPMENT_OPERATION__
+
+## 4.2 Funciones principales
+__EQUIPMENT_FUNCTIONS__
+
+__USER_SECTIONS__
+
+# EQUIPO
+
+__EQUIPMENT_CONTENT__
