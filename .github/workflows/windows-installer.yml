@@ -36,7 +36,7 @@ jobs:
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: release/E2PS-Manual-Builder-V3-Setup-3.0.1.exe
+          files: release/E2PS-Manual-Builder-V3-Setup-3.0.2.exe
           name: E2PS Manual Builder V3 ${{ github.ref_name }}
           generate_release_notes: true
         env:

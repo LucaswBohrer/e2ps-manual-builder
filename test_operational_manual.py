@@ -53,6 +53,7 @@ def main() -> None:
         )
         rmd = (output / "Português" / "manual.rmd").read_text(encoding="utf-8")
         assert "Manual Operacional" in rmd
+        assert "    lof:" not in rmd
         assert "Objetivo editável" in rmd
         assert "Funcionamento editável" in rmd
         assert "out.width='50%'" in rmd

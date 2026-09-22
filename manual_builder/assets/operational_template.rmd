@@ -6,7 +6,6 @@ output:
   pdf_document:
     latex_engine: lualatex
     toc: true
-    lof: true
     number_sections: true
   html_document:
     toc: true

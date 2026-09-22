@@ -582,8 +582,9 @@ class MainWindow(QMainWindow):
         self._settings.setValue("ui/theme", getattr(self, "_theme", THEME_LIGHT))
         self._settings.sync()
 
-    def _reset_project_state(self) -> None:
-        """Return the window to a blank-manual state without removing AI settings."""
+    def _reset_project_state(self, preserve_manual_settings: bool = False) -> None:
+        """Clear imported content, optionally preserving the selected manual settings."""
+        preserved_metadata = self._project_metadata() if preserve_manual_settings else None
         self._project_generation += 1
         self._pages.clear()
         self._sections.clear()
@@ -652,6 +653,8 @@ class MainWindow(QMainWindow):
         ):
             widget.setEnabled(False)
         self.content_text_input.setEnabled(False)
+        if preserved_metadata is not None:
+            self._apply_project_metadata(preserved_metadata)
         self.statusBar().showMessage("New manual started. The previous project was cleared.", 7000)
 
     def clear_all(self) -> None:
@@ -853,7 +856,7 @@ class MainWindow(QMainWindow):
         )
         if not file_path:
             return
-        self._reset_project_state()
+        self._reset_project_state(preserve_manual_settings=True)
 
         self._render_generation = self._project_generation
         self._render_worker = PdfRenderWorker(Path(file_path), Path(self._temp_dir.name))
@@ -878,7 +881,7 @@ class MainWindow(QMainWindow):
         if not file_path:
             return
 
-        self._reset_project_state()
+        self._reset_project_state(preserve_manual_settings=True)
 
         destination = Path(self._temp_dir.name) / "html_render"
         if destination.exists():
@@ -907,11 +910,14 @@ class MainWindow(QMainWindow):
         if not file_paths:
             return
         
-        self._reset_project_state()
-        
+        existing_pages = bool(self._pages)
+        if not existing_pages:
+            self._reset_project_state(preserve_manual_settings=True)
+
         pages = []
         temp_dir = Path(self._temp_dir.name)
-        for i, path_str in enumerate(file_paths, start=1):
+        next_number = max((page.number for page in self._pages), default=0) + 1
+        for i, path_str in enumerate(file_paths, start=next_number):
             src_path = Path(path_str)
             variant = 1
             dest_image_path = temp_dir / f"page_{i:03d}_{variant:02d}.png"
@@ -942,8 +948,21 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Image loading error", f"Could not process {src_path.name}:\n{e}")
                 
         if pages:
-            self._rendering_completed(pages)
-            self.statusBar().showMessage(f"Successfully loaded {len(pages)} images directly.")
+            if existing_pages:
+                self._pages.extend(pages)
+                self._populate_page_list()
+                self.select_all_button.setEnabled(True)
+                self.clear_selection_button.setEnabled(True)
+                self.crop_page_button.setEnabled(True)
+                self.ai_suggest_button.setEnabled(bool(self._pages))
+                self.add_section_button.setEnabled(bool(self._pages))
+                self.save_project_action.setEnabled(True)
+                self.statusBar().showMessage(
+                    f"Added {len(pages)} image(s) to the current manual."
+                )
+            else:
+                self._rendering_completed(pages)
+                self.statusBar().showMessage(f"Successfully loaded {len(pages)} images directly.")
 
     def _update_render_progress(self, current: int, total: int) -> None:
         if total > 0:

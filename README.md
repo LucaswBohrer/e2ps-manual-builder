@@ -37,7 +37,7 @@ A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já in
 ### Instalação em três passos
 
 1. Abra a página de [**Releases do projeto**](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest).
-2. Baixe o arquivo **`E2PS-Manual-Builder-V3-Setup-3.0.1.exe`** na seção **Assets**.
+2. Baixe o arquivo **`E2PS-Manual-Builder-V3-Setup-3.0.2.exe`** na seção **Assets**.
 3. Execute o instalador e abra **E2PS Manual Builder V3** pelo Menu Iniciar ou pelo atalho da Área de Trabalho.
 
 > A versão V3 instala em uma pasta separada e pode coexistir com instalações V1/V2. Não é necessário desinstalar as versões anteriores.
@@ -117,7 +117,7 @@ Ao escolher **Operational Equipment Manual**, o Builder prepara a estrutura do m
 
 Nenhum desses textos fica bloqueado: a base serve como ponto de partida e pode ser alterada, complementada ou substituída antes de salvar e exportar.
 
-No modo operacional, selecione as imagens importadas ou recortadas dentro de **Editar conteúdo**. Para cada figura, é possível configurar a legenda, a largura relativa e o alinhamento à esquerda, ao centro ou à direita. A ordem dos blocos define a composição final do R Markdown; assim, textos e figuras podem ser intercalados conforme a necessidade editorial.
+No modo operacional, selecione as imagens importadas ou recortadas dentro de **Editar conteúdo**. Para cada figura, é possível configurar a legenda, a largura relativa e o alinhamento à esquerda, ao centro ou à direita. A ordem dos blocos define a composição final do R Markdown; assim, textos e figuras podem ser intercalados conforme a necessidade editorial. Ao usar **Open Images** depois de abrir um PDF ou outra fonte, as imagens são adicionadas ao manual atual, com numeração própria, sem apagar as páginas já carregadas.
 
 O português é o idioma-base do modo operacional. Se **English** e **Español** estiverem selecionados, o exportador gera uma pasta independente para cada idioma e traduz os textos editáveis, campos do equipamento, seções, subseções e legendas. As imagens são reutilizadas entre os idiomas, salvo quando o usuário inserir uma variação específica.
 
@@ -266,7 +266,7 @@ O build V3 usa `packaging/E2PSManualBuilder.spec` para o empacotamento PyInstall
 
 ```text
 dist\E2PS Manual Builder\E2PSManualBuilder.exe
-release\E2PS-Manual-Builder-V3-Setup-3.0.1.exe
+release\E2PS-Manual-Builder-V3-Setup-3.0.2.exe
 ```
 
 O workflow [`windows-installer.yml`](.github/workflows/windows-installer.yml) executa esse processo em um runner Windows e publica o instalador como artefato da Release. O build Linux local pode ser feito com o mesmo arquivo `.spec`, mas gera um executável Linux, não um instalador `.exe`.

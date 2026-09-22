@@ -27,7 +27,7 @@ if errorlevel 1 goto :error
 echo.
 echo V3 build completed successfully.
 echo Executable: dist\E2PS Manual Builder\E2PSManualBuilder.exe
-echo Installer: release\E2PS-Manual-Builder-V3-Setup-3.0.1.exe
+echo Installer: release\E2PS-Manual-Builder-V3-Setup-3.0.2.exe
 exit /b 0
 
 :missing_inno
