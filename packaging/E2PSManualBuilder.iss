@@ -3,7 +3,7 @@
 ; never tries to overwrite or delete an executable from a legacy install.
 
 #define AppName "E2PS Manual Builder V3"
-#define AppVersion "3.0.0"
+#define AppVersion "3.0.1"
 #define AppPublisher "E2PS"
 #define AppExeName "E2PSManualBuilder.exe"
 #define AppId "{{A4A94D8A-7C9C-4E5A-8E52-7F6B1A3D9C20}"

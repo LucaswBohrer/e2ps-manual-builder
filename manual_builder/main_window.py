@@ -287,6 +287,7 @@ class MainWindow(QMainWindow):
 
         # Right panel: AI Chat Assistant & Translation settings
         right_panel_widget = QWidget()
+        right_panel_widget.setMinimumWidth(400)
         right_layout = QVBoxLayout(right_panel_widget)
 
         ai_chat_group = QGroupBox("🤖 E2PS AI Assistant & Chat")
@@ -428,8 +429,16 @@ class MainWindow(QMainWindow):
         appearance_layout.addWidget(self.theme_combo)
         right_layout.addWidget(appearance_group)
 
-        # Right panel now only contains AI Chat, translation settings and appearance
-        # Preview gets its own central dedicated wide panel
+        # The right column contains several vertically stacked editors. Keep the
+        # whole column scrollable so operational fields remain readable on normal
+        # laptop screens instead of being compressed into a fixed-height panel.
+        right_panel_scroll = QScrollArea()
+        right_panel_scroll.setObjectName("right_panel_scroll")
+        right_panel_scroll.setWidgetResizable(True)
+        right_panel_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        right_panel_scroll.setWidget(right_panel_widget)
+
+        # Preview gets its own central dedicated wide panel.
 
         self.preview = QLabel("Open a PDF, HTML file, or images to begin")
         self.preview.setObjectName("preview")
@@ -449,7 +458,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(page_panel)        # 1. Pages list
         splitter.addWidget(preview_group)     # 2. Large central PDF preview
         splitter.addWidget(section_panel)     # 3. Sections & mixed content editor
-        splitter.addWidget(right_panel_widget) # 4. AI Chat & Translation / Cover settings
+        splitter.addWidget(right_panel_scroll)  # 4. AI, translation and operational editor
         
         splitter.setSizes([220, 520, 380, 430])
         splitter.setStretchFactor(0, 1)

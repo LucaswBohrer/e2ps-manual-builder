@@ -37,7 +37,7 @@ A forma recomendada de usar o E2PS Manual Builder é pelo instalador. Ele já in
 ### Instalação em três passos
 
 1. Abra a página de [**Releases do projeto**](https://github.com/LuquinhasBohrer/e2ps-manual-builder/releases/latest).
-2. Baixe o arquivo **`E2PS-Manual-Builder-V3-Setup-3.0.0.exe`** na seção **Assets**.
+2. Baixe o arquivo **`E2PS-Manual-Builder-V3-Setup-3.0.1.exe`** na seção **Assets**.
 3. Execute o instalador e abra **E2PS Manual Builder V3** pelo Menu Iniciar ou pelo atalho da Área de Trabalho.
 
 > A versão V3 instala em uma pasta separada e pode coexistir com instalações V1/V2. Não é necessário desinstalar as versões anteriores.
@@ -266,7 +266,7 @@ O build V3 usa `packaging/E2PSManualBuilder.spec` para o empacotamento PyInstall
 
 ```text
 dist\E2PS Manual Builder\E2PSManualBuilder.exe
-release\E2PS-Manual-Builder-V3-Setup-3.0.0.exe
+release\E2PS-Manual-Builder-V3-Setup-3.0.1.exe
 ```
 
 O workflow [`windows-installer.yml`](.github/workflows/windows-installer.yml) executa esse processo em um runner Windows e publica o instalador como artefato da Release. O build Linux local pode ser feito com o mesmo arquivo `.spec`, mas gera um executável Linux, não um instalador `.exe`.
